@@ -3,7 +3,70 @@ from discord import app_commands
 from discord.ext import commands
 
 from random import randint
+import sqlite3
+from pathlib import Path
 
+# SQL FUNCTIONS (next_turn_conditions)
+
+VALID_COLUMNS = {"aim", "evaluate", "shock", "feint"} # Valid structural columns to prevent unauthorized SQL string injection
+
+def clear_player_conditions(connection: sqlite3.Connection, player_id: int) -> None:
+    """
+    Purges all transient modifiers for a given player by resetting columns to zero.
+    Does not delete the row structure, preserving the primary key reference.
+    """
+    cursor = connection.cursor()
+    cursor.execute("""
+        UPDATE next_turn_conditions
+        SET aim = 0, evaluate = 0, shock = 0, feint = 0
+        WHERE player_id = ?
+    """, (player_id,))
+    connection.commit()
+
+def set_player_condition(connection: sqlite3.Connection, player_id: int, column_name: str, value: int) -> None:
+    """
+    Executes an atomic upsert operation on a specific verified column.
+    Initializes the row if absent, or overwrites the target column if present.
+    """
+    if column_name.lower() not in VALID_COLUMNS:
+        raise ValueError(f"Abnormal operation detected: '{column_name}' is not a valid condition column.")
+
+    cursor = connection.cursor()
+    
+    # Utilizing an idempotent UPSERT statement (ON CONFLICT clause)
+    # Standard query parameters (?) cannot be used for column structural names
+    query = f"""
+        INSERT INTO next_turn_conditions (player_id, {column_name})
+        VALUES (?, ?)
+        ON CONFLICT(player_id) DO UPDATE SET
+            {column_name} = excluded.{column_name}
+    """
+    
+    cursor.execute(query, (player_id, value))
+    connection.commit()
+
+def get_player_condition(connection: sqlite3.Connection, player_id: int, column_name: str) -> int:
+    """
+    Queries a verified condition column for a specific player.
+    Returns 0 as a neutral fallback if the player or the data does not exist.
+    """
+    if column_name.lower() not in VALID_COLUMNS:
+        raise ValueError(f"Abnormal operation detected: '{column_name}' is not a valid condition column.")
+
+    cursor = connection.cursor()
+    query = f"SELECT {column_name} FROM next_turn_conditions WHERE player_id = ?"
+    
+    cursor.execute(query, (player_id,))
+    row = cursor.fetchone()
+    
+    # Return the clean scalar value or a neutral 0 if row/field is evaluated as None
+    if row is not None and row[0] is not None:
+        return int(row[0])
+    return 0
+
+# SQL FUNCTIONS (current_attacks)
+
+# Command Cog
 class Battle(commands.Cog):
     """
     
@@ -11,8 +74,11 @@ class Battle(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Dependency injection extraction should occur strictly here.
-        # Example: self.config = self.bot.config
+        project_root = Path(__file__).resolve().parent.parent
+        database_path = project_root / "data" / "database.db"
+        
+        # Establishing the persistent, active connection channel
+        self.db_connection = sqlite3.connect(database_path)
 
     # Damage Command ------------------------------------------------
     @app_commands.command(description="Calcula dano de um ataque")
@@ -137,6 +203,24 @@ class Battle(commands.Cog):
         )
 
         await interact.response.send_message(embed=dmg_embed)
+
+    # Atk ---------------------------------------------------------
+    @app_commands.command(description="Realiza um ataque")
+    @app_commands.choices(
+        maneuver=[
+            app_commands.Choice(name="Ataque", value=3),
+            app_commands.Choice(name="Ataque Total", value=4)
+        ]
+    )
+    async def combat(self, interaction: discord.Interaction, maneuver: app_commands.Choice[int]):
+        player_id = interaction.user.id
+
+        selected_maneuver = maneuver.value
+
+        if selected_maneuver == 0: # Ataque
+            ...
+        else: # Ataque total
+            ...
 
 async def setup(bot: commands.Bot):
     """

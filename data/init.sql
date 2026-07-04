@@ -12,7 +12,7 @@ CREATE TABLE "skills" (
 	"description"	TEXT,
 	PRIMARY KEY("skill_id" AUTOINCREMENT)
 );
-CREATE TABLE "magic" (
+CREATE TABLE "magics" (
 	"magic_id"	INTEGER NOT NULL UNIQUE,
 	"name"	TEXT,
 	"attribute"	TEXT,
@@ -56,7 +56,7 @@ CREATE TABLE "character_skills" (
 	FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE CASCADE,
 	UNIQUE("character_id", "skill_id")
 );
-CREATE TABLE "character_magic" (
+CREATE TABLE "character_magics" (
 	"character_magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
 	"character_id"	INTEGER,
 	"magic_id"	INTEGER,
@@ -67,4 +67,20 @@ CREATE TABLE "character_magic" (
 CREATE TABLE hdm (
     id_player INTEGER PRIMARY KEY,
     fate INTEGER NOT NULL
+);
+CREATE TABLE "next_turn_conditions" (
+	"player_id"	INTEGER,
+	"aim"	INTEGER,
+	"evaluate"	INTEGER,
+	"shock"	INTEGER,
+	"feint"	INTEGER,
+	PRIMARY KEY("player_id")
+);
+CREATE TABLE "current_attacks" (
+	"id"	INTEGER NOT NULL,
+	"raw_damage"	INTEGER,
+	"dmg_type"	TEXT,
+	"hit_location"	TEXT,
+	"feint"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT)
 );
