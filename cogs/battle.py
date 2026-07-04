@@ -6,60 +6,75 @@ from random import randint
 import sqlite3
 from pathlib import Path
 
+from utils.test_mechanics import quick_dispute
+
 # SQL FUNCTIONS (next_turn_conditions)
 
 VALID_COLUMNS = {"aim", "evaluate", "shock", "feint"} # Valid structural columns to prevent unauthorized SQL string injection
 
+def _resolve_character_id(connection: sqlite3.Connection, player_id: int) -> int:
+    """
+    Internal helper to map the Discord player_id (owner_id) to the internal character_id.
+    Raises a ValueError if the structural integrity is broken and no character is assigned.
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT character_id FROM characters WHERE owner_id = ?", (player_id,))
+    row = cursor.fetchone()
+    
+    if row is None:
+        raise ValueError(f"Database Anomaly: No character found assigned to owner_id {player_id}.")
+    return int(row[0])
+
 def clear_player_conditions(connection: sqlite3.Connection, player_id: int) -> None:
     """
-    Purges all transient modifiers for a given player by resetting columns to zero.
-    Does not delete the row structure, preserving the primary key reference.
+    Resolves the character identity and purges all transient modifiers by resetting columns to zero.
     """
+    character_id = _resolve_character_id(connection, player_id)
     cursor = connection.cursor()
     cursor.execute("""
         UPDATE next_turn_conditions
         SET aim = 0, evaluate = 0, shock = 0, feint = 0
-        WHERE player_id = ?
-    """, (player_id,))
+        WHERE character_id = ?
+    """, (character_id,))
     connection.commit()
 
 def set_player_condition(connection: sqlite3.Connection, player_id: int, column_name: str, value: int) -> None:
     """
-    Executes an atomic upsert operation on a specific verified column.
-    Initializes the row if absent, or overwrites the target column if present.
+    Resolves the character identity and executes an atomic upsert on the targeted validated column.
     """
     if column_name.lower() not in VALID_COLUMNS:
         raise ValueError(f"Abnormal operation detected: '{column_name}' is not a valid condition column.")
 
+    character_id = _resolve_character_id(connection, player_id)
     cursor = connection.cursor()
     
-    # Utilizing an idempotent UPSERT statement (ON CONFLICT clause)
-    # Standard query parameters (?) cannot be used for column structural names
     query = f"""
-        INSERT INTO next_turn_conditions (player_id, {column_name})
+        INSERT INTO next_turn_conditions (character_id, {column_name})
         VALUES (?, ?)
-        ON CONFLICT(player_id) DO UPDATE SET
+        ON CONFLICT(character_id) DO UPDATE SET
             {column_name} = excluded.{column_name}
     """
-    
-    cursor.execute(query, (player_id, value))
+    cursor.execute(query, (character_id, value))
     connection.commit()
 
 def get_player_condition(connection: sqlite3.Connection, player_id: int, column_name: str) -> int:
     """
-    Queries a verified condition column for a specific player.
-    Returns 0 as a neutral fallback if the player or the data does not exist.
+    Queries a condition column. Returns 0 if the character lacks an entry or doesn't exist.
     """
     if column_name.lower() not in VALID_COLUMNS:
         raise ValueError(f"Abnormal operation detected: '{column_name}' is not a valid condition column.")
 
+    try:
+        character_id = _resolve_character_id(connection, player_id)
+    except ValueError:
+        # Defensive fallback: if the player has no character registered, return the neutral modifier 0
+        return 0
+
     cursor = connection.cursor()
-    query = f"SELECT {column_name} FROM next_turn_conditions WHERE player_id = ?"
-    
-    cursor.execute(query, (player_id,))
+    query = f"SELECT {column_name} FROM next_turn_conditions WHERE character_id = ?"
+    cursor.execute(query, (character_id,))
     row = cursor.fetchone()
     
-    # Return the clean scalar value or a neutral 0 if row/field is evaluated as None
     if row is not None and row[0] is not None:
         return int(row[0])
     return 0
@@ -221,6 +236,105 @@ class Battle(commands.Cog):
             ...
         else: # Ataque total
             ...
+
+    # Fnt ---------------------------------------------------------
+    @app_commands.command(description="Realiza uma finta")
+    @app_commands.describe(
+        nh1="Seu nível de habilidade",
+        nh2="Nível de habilidade do seu oponente"
+    )
+    async def fnt(self, interaction: discord.Interaction, nh1: int, nh2: int):
+        player_id = interaction.user.id
+
+        shock = get_player_condition(self.db_connection, player_id, "feint")
+
+        effective_nh1 = nh1 - shock
+
+        result = quick_dispute(player_id, effective_nh1, nh2)
+
+        dice_pool1 = result["dice_pool1"]
+        success_roll1 = result["success_roll1"]
+        margin1 = result["margin1"]
+        dices1 = result["dices1"]
+
+        dice_pool2 = result["dice_pool2"]
+        success_roll2 = result["success_roll2"]
+        margin2 = result["margin2"]
+        dices2 = result["dices2"]
+
+
+        fnt_embed = discord.Embed()
+
+        if success_roll1 is True and success_roll2 is False:
+            fnt_embed.title = "A FINTA FOI UM SUCESSO"
+            fnt_embed.description = (
+                "Você obteve um sucesso no teste e seu oponente um fracasso"
+            )
+            fnt_embed.color = discord.Color.green()
+            set_player_condition(self.db_connection, player_id, "fint", margin1) # Add the value in the SQL       
+
+
+        elif success_roll1 is False and success_roll2 is True:
+            fnt_embed.title = "A FINTA FOI UM FRACASSO"
+            fnt_embed.description = (
+                "Você obteve um fracasso no teste e seu oponente um sucesso"
+            )
+            fnt_embed.color = discord.Color.red()
+
+        elif margin1 > margin2:
+            fnt_embed.title = "A FINTA FOI UM SUCESSO!"
+            fnt_embed.color = discord.Color.green()
+            fnt_embed.description = "Resultado decidido pela margem do teste."
+            set_player_condition(self.db_connection, player_id, "fint", margin1)# Add the value in the SQL             
+
+        elif margin1 == margin2:
+            fnt_embed.title = "EMPATE!"
+            fnt_embed.color = discord.Color.greyple()
+            fnt_embed.description = "Empate"
+
+        else:
+            fnt_embed.title = "A FINTA FOI UM FRACASSO"
+            fnt_embed.color = discord.Color.red()
+            fnt_embed.description = "Resultado decidido pela margem do teste."
+
+        fnt_embed.add_field(
+            name="Você",
+            value=f"`Dados: {dices1} = {dice_pool1}`\nNH: {nh1}\nSucesso: {"Sim" if success_roll1 is True else "Não"}\n`Margem: {margin1}`",
+            inline=False,
+        )
+        fnt_embed.add_field(
+            name="Oponente",
+            value=f"`Dados: {dices2} = {dice_pool2}`\nNH: {nh2}\nSucesso: {"Sim" if success_roll2 is True else "Não"}\n`Margem: {margin2}`",
+            inline=False,
+        )
+        fnt_embed.add_field(
+            name="Diferença das Margens de Sucesso",
+            value=f"`{margin1} - ({margin2}) = {margin1 - margin2}`",
+            inline=False
+        )
+
+    # Apt (aim command) -------------------------------------------
+    @app_commands.command(name="apt",description="Aponta com uma arma de combate a distância")
+    async def aim(self, interaction: discord.Interaction):
+        player_id = interaction.user.id
+
+        aim_value = get_player_condition(self.db_connection, player_id, "aim")
+
+        aim_value += 1
+
+        set_player_condition(self.db_connection, player_id, "aim", aim_value)
+    
+    # Avaliaar (evaluate command) -------------------------------------------
+    @app_commands.command(name="avaliar",description="Estuda o oponente para conseguir um bônus na próxima rolagem")
+    async def evaluate(self, interaction: discord.Interaction):
+        player_id = interaction.user.id
+
+        evaluate_value = get_player_condition(self.db_connection, player_id, "evaluate")
+
+        evaluate_value += 1
+
+        set_player_condition(self.db_connection, player_id, "evaluate", evaluate_value)
+
 
 async def setup(bot: commands.Bot):
     """
