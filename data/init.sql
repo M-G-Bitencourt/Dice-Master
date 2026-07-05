@@ -38,9 +38,10 @@ CREATE TABLE hdm (
 CREATE TABLE "current_attacks" (
 	"id"	INTEGER NOT NULL,
 	"raw_damage"	INTEGER,
-	"dmg_type"	TEXT,
-	"hit_location"	TEXT,
+	"dmg_type"	INTEGER,
+	"hit_location"	INTEGER,
 	"feint"	INTEGER,
+	"critical" INTEGER,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 CREATE TABLE "next_turn_conditions" (
@@ -68,7 +69,9 @@ CREATE TABLE "characters" (
 	"additional_basic_speed"	INTEGER DEFAULT 0,
 	"additional_basic_move"	INTEGER DEFAULT 0,
 	"energy_reserve"	INTEGER DEFAULT 0,
-	PRIMARY KEY("character_id" AUTOINCREMENT)
+	"normal_diffuse_homogeneous_unded"	INTEGER DEFAULT 0,
+	"money"	INTEGER DEFAULT 0,
+	PRIMARY KEY("character_id")
 );
 CREATE TABLE "character_skills" (
 	"character_skill_id"	INTEGER,

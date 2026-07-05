@@ -132,15 +132,15 @@ class Skill_tests(commands.Cog):
 
         result = quick_dispute(player_id, effective_nh1, effective_nh2)
 
-        dice_pool1 = result["dice_pool1"]
-        success_roll1 = result["success_roll1"]
-        margin1 = result["margin1"]
-        dices1 = result["dices1"]
+        dice_pool1 = result["result1"]["dice_pool1"]
+        success_roll1 = result["result1"]["success_roll1"]
+        margin1 = result["result1"]["margin1"]
+        dices1 = result["result1"]["dices1"]
 
-        dice_pool2 = result["dice_pool2"]
-        success_roll2 = result["success_roll2"]
-        margin2 = result["margin2"]
-        dices2 = result["dices2"]
+        dice_pool2 = result["result2"]["dice_pool2"]
+        success_roll2 = result["result2"]["success_roll2"]
+        margin2 = result["result2"]["margin2"]
+        dices2 = result["result2"]["dices2"]
 
         # Embed
         qkd_embed = discord.Embed()
