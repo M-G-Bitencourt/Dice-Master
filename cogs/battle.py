@@ -95,8 +95,8 @@ def save_current_attack(
     raw_damage: int, 
     dmg_type: int, 
     hit_location: int, 
-    feint: int, 
-    critical: int
+    feint: int,
+    critical_damage: int
 ) -> None:
     """
     Enforces a single-state invariant by clearing the table before injecting 
@@ -109,9 +109,9 @@ def save_current_attack(
     
     # Inject the new state vector
     cursor.execute("""
-        INSERT INTO current_attacks (raw_damage, dmg_type, hit_location, feint, critical)
+        INSERT INTO current_attacks (raw_damage, dmg_type, hit_location, feint, critical_damage)
         VALUES (?, ?, ?, ?, ?)
-    """, (raw_damage, dmg_type, hit_location, feint, critical))
+    """, (raw_damage, dmg_type, hit_location, feint, critical_damage))
     
     connection.commit()
 
@@ -122,7 +122,7 @@ def get_current_attack(connection: sqlite3.Connection) -> dict:
     """
     cursor = connection.cursor()
     cursor.execute("""
-        SELECT raw_damage, dmg_type, hit_location, feint, critical 
+        SELECT raw_damage, dmg_type, hit_location, feint, critical_damage 
         FROM current_attacks 
         LIMIT 1
     """)
@@ -136,7 +136,7 @@ def get_current_attack(connection: sqlite3.Connection) -> dict:
         "dmg_type": row[1],
         "hit_location": row[2],
         "feint": row[3],
-        "critical": row[4]
+        "critical_damage": row[4]
     }
 
 #SQL FUNCTIONS (characters)
@@ -155,6 +155,101 @@ def get_character_strength(connection: sqlite3.Connection, owner_id: int) -> int
         raise ValueError(f"Database Anomaly: Access denied or character non-existent for owner_id {owner_id}.")
         
     return int(row[0])
+
+def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict:
+    """
+    Retrieves the comprehensive attribute matrix for a specific character 
+    designated by the owner's unique Discord identifier.
+    """
+    cursor = connection.cursor()
+    
+    # Explicitly listing all 17 columns to avoid the fragility of SELECT *
+    cursor.execute("""
+        SELECT 
+            character_id, owner_id, is_npc, name, st, dx, iq, ht, 
+            additional_max_pv, additional_vont, additional_per, 
+            additional_max_pf, additional_basic_speed, additional_basic_move, 
+            energy_reserve, normal_diffuse_homogeneous_unded, money
+        FROM characters 
+        WHERE owner_id = ?
+    """, (owner_id,))
+    
+    row = cursor.fetchone()
+    
+    if row is None:
+        raise ValueError(f"Database Anomaly: No character sheet linked to owner_id {owner_id}.")
+        
+    return {
+        "character_id": row[0],
+        "owner_id": row[1],
+        "is_npc": bool(row[2]),
+        "name": row[3],
+        "st": row[4],
+        "dx": row[5],
+        "iq": row[6],
+        "ht": row[7],
+        "additional_max_pv": row[8],
+        "additional_vont": row[9],
+        "additional_per": row[10],
+        "additional_max_pf": row[11],
+        "additional_basic_speed": row[12],
+        "additional_basic_move": row[13],
+        "energy_reserve": row[14],
+        "normal_diffuse_homogeneous_unded": row[15],
+        "money": row[16]
+    }
+
+#SQL FUNCTIONS (character_resource_pools)
+def get_character_resources(connection: sqlite3.Connection, player_id: int) -> dict:
+    """
+    Retrieves all volatile resource pools for a given player and constructs a dictionary mapping.
+    Raises ValueError if the player lacks an assigned character.
+    """
+    character_id = _resolve_character_id(connection, player_id)
+    cursor = connection.cursor()
+    
+    cursor.execute(
+        """
+        SELECT resource, value 
+        FROM character_resource_pools 
+        WHERE character_id = ?
+        """,
+        (character_id,)
+    )
+    
+    rows = cursor.fetchall()
+    
+    # Dictionary comprehension for optimal mapping: {"HP": 10, "FP": 12}
+    return {row[0]: row[1] for row in rows}
+
+def set_character_resource(connection: sqlite3.Connection, player_id: int, resource_name: str, new_value: int) -> None:
+    """
+    Mutates the absolute value of a specific resource pool for a character.
+    If the resource does not exist in the relational schema, it automatically instantiates it.
+    """
+    character_id = _resolve_character_id(connection, player_id)
+    cursor = connection.cursor()
+    
+    cursor.execute(
+        """
+        UPDATE character_resource_pools 
+        SET value = ? 
+        WHERE character_id = ? AND resource = ?
+        """,
+        (new_value, character_id, resource_name)
+    )
+    
+    # Structural fallback: If no rows were mutated, the resource metric is absent.
+    if cursor.rowcount == 0:
+        cursor.execute(
+            """
+            INSERT INTO character_resource_pools (character_id, resource, value)
+            VALUES (?, ?, ?)
+            """,
+            (character_id, resource_name, new_value)
+        )
+        
+    connection.commit()
 
 # Other
 def damage_func(st: int, gdp_geb: int, weapon_dmg: int, strong: int | None = None):
@@ -234,18 +329,27 @@ def damage_func(st: int, gdp_geb: int, weapon_dmg: int, strong: int | None = Non
     dice_count, st_mod = basic_damage[gdp_geb] 
 
     # Damage calculation
-    dices = [randint(1, 6) for _ in range(dice_count)]
-    dice_sum = sum(dices)
 
-    if strong is 1:
+    dices = [randint(1, 6) for _ in range(dice_count)]
+    critical_dices = [6 for _ in range(dice_count)]
+
+    dice_sum = sum(dices)
+    critical_dice_sum = sum(critical_dices)
+
+
+    if strong == 1:
         if dice_count > 1:
             damage = dice_sum + st_mod + weapon_dmg + dice_count
+            critical_damage = critical_dice_sum + st_mod + weapon_dmg + dice_count
         else:
             damage = dice_sum + st_mod + weapon_dmg + 2
+            critical_damage = critical_dice_sum + st_mod + weapon_dmg + 2
     else:
         damage = dice_sum + st_mod + weapon_dmg
+        critical_damage = critical_dice_sum + st_mod + weapon_dmg
 
     data = {
+        "critical_damage": critical_damage,
         "damage": damage,
         "dice_count": dice_count,
         "dices": dices,
@@ -258,7 +362,20 @@ def damage_func(st: int, gdp_geb: int, weapon_dmg: int, strong: int | None = Non
 # Command Cog
 class Battle(commands.Cog):
     """
-    
+    Orchestrates the tactical combat simulation engine for the Dice-Master system,
+    adhering strictly to the mechanical canons of the GURPS 4th Edition framework.
+
+    This cog manages the lifecycle of physical confrontations, encapsulating melee
+    engagements, ranged ballistic actions, and active defense resolution pipelines.
+    It interfaces dynamically with the relational database backend to track transient
+    combat states—such as shock penalties, aim variables, feints, and evaluative
+    maneuvers—while mutating character resource pools based on regional injury
+    multipliers and limb crippling thresholds.
+
+    Attributes:
+        bot (commands.Bot): The core Discord bot instance executing the application.
+        db_connection (sqlite3.Connection): The active relational database handle 
+            utilized for persisting combat states and retrieving character matrices.
     """
 
     def __init__(self, bot: commands.Bot):
@@ -336,7 +453,15 @@ class Battle(commands.Cog):
         await interact.response.send_message(embed=dmg_embed)
 
     # atk_melee ---------------------------------------------------------
-    @app_commands.command(name="atk", description="Realiza um ataque")
+    @app_commands.command(name="atk", description="Realiza um ataque corpo a corpo")
+    @app_commands.describe(
+        nh="Seu Nível de Habilidade",
+        local="Local onde você irá atacar",
+        gdp_geb="É Golpe de Ponta ou Golpe em Balanço?",
+        weapon_dmg="Dano da arma",
+        damage_type="Tipo de dano",
+        strong="Apenas coloque sim, se você estiver usadno o ataque total forte"
+    )
     @app_commands.choices(
         local=[
             app_commands.Choice(name="Tronco (0)", value=0),
@@ -356,9 +481,9 @@ class Battle(commands.Cog):
             app_commands.Choice(name="GeB", value=12)
         ],
         damage_type=[
-            app_commands.Choice(name="Contusão", value=0),
-            app_commands.Choice(name="Corte", value=1),
-            app_commands.Choice(name="Perf", value=2),
+            app_commands.Choice(name="Contusão", value=4),
+            app_commands.Choice(name="Corte", value=5),
+            app_commands.Choice(name="Perf", value=7),
         ],
         strong=[
             app_commands.Choice(name="Não", value=0),
@@ -369,31 +494,43 @@ class Battle(commands.Cog):
         self,
         interaction: discord.Interaction,
         nh: int,
-        local:app_commands.Choice[int],
-        gdp_geb:app_commands.Choice[int],
-        weapon_dmg:int,
-        damage_type:app_commands.Choice[int],
+        local: app_commands.Choice[int],
+        gdp_geb: app_commands.Choice[int],
+        weapon_dmg: int,
+        damage_type: app_commands.Choice[int],
         strong: app_commands.Choice[int] | None = None
     ):
+        strong_value = strong.value if strong is not None else 0
         player_id = interaction.user.id
 
-        # Database data collection
-        evaluate_value = get_player_condition(self.db_connection, player_id, "evaluate")
-        evaluate_modifier = evaluate_value if evaluate_value < 3 else 3
+        # Hardcoded penalty dictionary to avoid brittle string-name lookups
+        location_penalties = {
+            0: 0, 1: -3, 2: -7, 3: -9, 4: -5, 5: -5, 6: -3, 7: -2, 8: -2, 9: -4, 10: -4
+        }
+        local_difficulty = location_penalties.get(local.value, 0)
 
-        shock = get_player_condition(self.db_connection, player_id, "shock")
-        local_difficulty = self.body_parts_difficulty[local.name]
-        effective_nh = nh + local_difficulty + evaluate_modifier + shock
+        # Database state collection with defensive fallbacks
+        evaluate_raw = get_player_condition(self.db_connection, player_id, "evaluate")
+        evaluate_modifier = min(evaluate_raw, 3) if evaluate_raw is not None else 0
+        
+        shock_raw = get_player_condition(self.db_connection, player_id, "shock")
+        shock = shock_raw if shock_raw is not None else 0
+        
+        feint_raw = get_player_condition(self.db_connection, player_id, "feint")
+        feint_value = feint_raw if feint_raw is not None else 0
+        
         st = get_character_strength(self.db_connection, player_id)
-        feint = get_player_condition(self.db_connection, player_id, "feint")
 
-        # cleaning up the tables
+        # Mathematical correction: shock is a penalty and must be subtracted
+        total_modifiers = local_difficulty + evaluate_modifier - shock
+        effective_nh = max(0, nh + total_modifiers)
+
+        # Ephemeral database state purge
         clear_player_conditions(self.db_connection, player_id)
         clear_current_attack(self.db_connection)
 
-        # Dice Roll
+        # Dice roll mechanics execution
         pending_fate = consume_deterministic_fate(player_id)
-
         if pending_fate is not None:
             dices = hdm_dices(nh=effective_nh, fate=pending_fate)
         else:
@@ -401,112 +538,468 @@ class Battle(commands.Cog):
         
         dice_pool = sum(dices)
 
-        if effective_nh < 0:  # Ensures effective NH is never less than 0
-            effective_nh = 0
-        
+        # Embed and state engine initialization
         atk_melee_embed = discord.Embed()
-        # Initializing the variable is necessary so the text editor stops thinking the code will cause an error.
-        critical_failure_dice = 0
+        is_success = False
+        is_critical_success = False
+        is_critical_failure = False
+        critical_failure_dices = []
 
-        # Validation of success
-        if dice_pool == 18:  # Verification of critical failures
+        # ==========================================
+        # SUCCESS RESOLUTION STATE MACHINE
+        # ==========================================
+        if dice_pool == 18:
+            is_critical_failure = True
+        elif dice_pool == 17:
+            is_critical_failure = True if effective_nh <= 15 else False
+        elif dice_pool <= effective_nh:
+            if dice_pool <= 4 or (effective_nh - dice_pool >= 10):
+                is_critical_success = True
+                is_success = True
+            else:
+                is_success = True
+        else:
+            if dice_pool - effective_nh >= 10:
+                is_critical_failure = True
+
+        # ==========================================
+        # POST-ROLL LOGIC & DATA PERSISTENCE
+        # ==========================================
+        if is_critical_failure:
             atk_melee_embed.title = "FALHA CRÍTICA!"
             atk_melee_embed.color = discord.Color.brand_red()
-            critical_failure_dice = [randint(1, 6) for _ in range(3)]
-
-        elif dice_pool == 17:  # Verification of critical failures
-            if effective_nh <= 15:
-                atk_melee_embed.title = "FALHA CRÍTICA!"
-                atk_melee_embed.color = discord.Color.brand_red()
-                critical_failure_dice = [randint(1, 6) for _ in range(3)]
-            else:
-                atk_melee_embed.title = "FALHA"
-                atk_melee_embed.color = discord.Color.red()
-
-        elif dice_pool <= effective_nh:  # If the roll was a success
-            if dice_pool <= 4:
+            critical_failure_dices = [randint(1, 6) for _ in range(3)]
+        elif is_success:
+            if is_critical_success:
                 atk_melee_embed.title = "GOLPE FULMINANTE!"
                 atk_melee_embed.color = discord.Color.gold()
-                decisive_success_dices = [randint(1, 6) for _ in range(3)]
-
-                # SQL insertion
-                atk_form = 0 if gdp_geb.value == 11 else 1 # 0 if GdP, 1 if GeB
-                damage_data = damage_func(st, atk_form, weapon_dmg, strong.value)
-                raw_damage = damage_data["damage"]
-                save_current_attack(self.db_connection, raw_damage, damage_type.value, local.value, feint, decisive_success_dices)
-
             else:
-                if (
-                    effective_nh - dice_pool >= 10
-                ):  # Checks if the margin of success is 10 or greater
-                    atk_melee_embed.title = "GOLPE FULMINANTE"
-                    atk_melee_embed.color = discord.Color.gold()
-                    decisive_success_dices = [randint(1, 6) for _ in range(3)]
+                atk_melee_embed.title = "SUCESSO!"
+                atk_melee_embed.color = discord.Color.green()
 
-                    # SQL insertion
-                    atk_form = 0 if gdp_geb.value == 11 else 1 # 0 if GdP, 1 if GeB
-                    damage_data = damage_func(st, atk_form, weapon_dmg, strong.value)
-                    raw_damage = damage_data["damage"]
-                    save_current_attack(self.db_connection, raw_damage, damage_type.value, local.value, feint, decisive_success_dices)
-                
-                else:
-                    atk_melee_embed.title = "SUCESSO!"
-                    atk_melee_embed.color = discord.Color.green()
+            # Resolved duplication anomaly: damage_func is called exactly once here
+            atk_form = 0 if gdp_geb.value == 11 else 1  # 0 for GdP, 1 for GeB
+            damage_data = damage_func(st, atk_form, weapon_dmg, strong_value)
+            raw_damage = damage_data["damage"]
+            critical_raw_damage = damage_data["critical_damage"]
+            
+            save_current_attack(
+                self.db_connection, raw_damage, damage_type.value, 
+                local.value, feint_value, critical_raw_damage
+            )
+        else:
+            atk_melee_embed.title = "FALHA"
+            atk_melee_embed.color = discord.Color.red()
 
-                    # SQL insertion
-                    atk_form = 0 if gdp_geb.value == 11 else 1 # 0 if GdP, 1 if GeB
-                    damage_data = damage_func(st, atk_form, weapon_dmg, strong.value)
-                    raw_damage = damage_data["damage"]
-                    save_current_attack(self.db_connection, raw_damage, damage_type.value, local.value, feint, 0)
-
-        else:  # If the roll was not a success
-            if (
-                dice_pool - effective_nh >= 10
-            ):  # Checks if the margin of failure is 10 or greater
-                atk_melee_embed.title = "FALHA CRÍTICA!"
-                atk_melee_embed.color = discord.Color.brand_red()
-                critical_failure_dice = [randint(1, 6) for _ in range(3)]
-
-            else:
-                atk_melee_embed.title = "FALHA"
-                atk_melee_embed.color = discord.Color.red()
-        
-        # O sistema não está mostrando o valor com as modificações de local choque etc. Colocar isso na embed
-        total_modifiers = local_difficulty + shock + evaluate_modifier
-        signal_modifier = "-" if total_modifiers < 0 else "+"
-        signal_weapon_dmg = "-" if weapon_dmg < 0 else "+"
-        is_strong = "Não" if strong == None or strong.value == 0 else "Sim"
+        # ==========================================
+        # UI PRESENTATION GENERATION
+        # ==========================================
+        modifier_sign = "+" if total_modifiers >= 0 else "-"
+        weapon_dmg_sign = "+" if weapon_dmg >= 0 else "-"
+        strong_status_string = "Sim" if strong_value == 1 else "Não"
 
         atk_melee_embed.add_field(
             name="Modificadores",
             value=(
-                f"Local: {local.name}\n"
-                f"Choque: {shock}\n"
-                f"Avaliação: {evaluate_modifier}\n"
-                f"TOTAL: ({local_difficulty}) + ({shock}) + ({evaluate_modifier}) = `{total_modifiers}`"
+                f"Local Escolhido: {local.name}\n"
+                f"Penalidade de Choque: `-{shock}`\n"
+                f"Bônus de Avaliação: `+{evaluate_modifier}`\n"
+                f"TOTAL: ({local_difficulty}) + ({evaluate_modifier}) - ({shock}) = `{total_modifiers}`"
             ),
             inline=False
         )
         
         atk_melee_embed.add_field(
-            name="Dados",
+            name="Dados Técnicos",
             value=(
-                f"{gdp_geb.name} {signal_weapon_dmg} {abs(weapon_dmg)}\n"
-                f"Forte: {is_strong}\n\n"
+                f"Fórmula: {gdp_geb.name} {weapon_dmg_sign} {abs(weapon_dmg)}\n"
+                f"Ataque Forte: {strong_status_string}\n\n"
                 f"NH Básico: {nh}\n"
-                f"NH Efetivo: `{effective_nh}` -> {nh} {signal_modifier} {abs(total_modifiers)}\n"
-                f"Parada de Dados: {dices} = `{dice_pool}`"
+                f"NH Efetivo: `{effective_nh}` -> {nh} {modifier_sign} {abs(total_modifiers)}\n"
+                f"Rolagem dos Dados: {dices} = `{dice_pool}`"
             ),
             inline=False
         )
 
-        if atk_melee_embed.title == "FALHA CRÍTICA!":
+        if is_critical_failure:
             atk_melee_embed.add_field(
-                name="Falha Crítica",
-                value=f"Valor da rolagem Crítica: {critical_failure_dice} = {sum(critical_failure_dice)}"
+                name="Tabela de Falhas Críticas (Combate Corpo a Corpo)",
+                value=f"Dados: `{critical_failure_dices} = {sum(critical_failure_dices)}`",
+                inline=False
             )
 
         await interaction.response.send_message(embed=atk_melee_embed)
+    
+    # ranged_attack ------------------------------------------------------
+    @app_commands.command(name="ranged_attack", description="Realiza um ataque a distância com uma arma motora")
+    @app_commands.describe(
+        nh="Seu Nível de Habilidade",
+        local="Local onde você irá atacar",
+        weapon_dmg="Dano da arma",
+        damage_type="Tipo de dano"
+
+    )
+    @app_commands.choices(
+        local=[
+            app_commands.Choice(name="Tronco (0)", value=0),
+            app_commands.Choice(name="Órgãos Vitais (-3)", value=1),
+            app_commands.Choice(name="Crânio (-7)", value=2),
+            app_commands.Choice(name="Olho (-9)", value=3),
+            app_commands.Choice(name="Rosto (-5)", value=4),
+            app_commands.Choice(name="Pescoço (-5)", value=5),
+            app_commands.Choice(name="Virilha (-3)", value=6),
+            app_commands.Choice(name="Braço (-2)", value=7),
+            app_commands.Choice(name="Perna (-2)", value=8),
+            app_commands.Choice(name="Mão (-4)", value=9),
+            app_commands.Choice(name="Pé (-4)", value=10)
+        ],
+        damage_type=[
+            app_commands.Choice(name="Contusão", value=4),
+            app_commands.Choice(name="Perfurante", value=7),
+        ],
+    )
+    async def ranged_atk(
+        self,
+        interaction: discord.Interaction,
+        nh: int,
+        local: app_commands.Choice[int],
+        weapon_dmg: int,
+        damage_type: app_commands.Choice[int],
+    ):
+        player_id = interaction.user.id
+
+        # Internal dictionary mapping to bypass fragile string lookups on local.name
+        location_penalties = {
+            0: 0, 1: -3, 2: -7, 3: -9, 4: -5, 5: -5, 6: -3, 7: -2, 8: -2, 9: -4, 10: -4
+        }
+        local_difficulty = location_penalties.get(local.value, 0)
+
+        # Database state collection
+        aim_value = get_player_condition(self.db_connection, player_id, "aim")
+        aim_modifier = min(aim_value, 3) if aim_value is not None else 0
+        shock = get_player_condition(self.db_connection, player_id, "shock")
+        st = get_character_strength(self.db_connection, player_id)
+        
+        # Tactical math correction: Shock is a penalty, it must be subtracted
+        total_modifiers = local_difficulty + aim_modifier - shock
+        effective_nh = max(0, nh + total_modifiers)
+        feint_value = 0
+
+        # Housekeeping pipeline: purging obsolete transient states
+        clear_player_conditions(self.db_connection, player_id)
+        clear_current_attack(self.db_connection)
+
+        # Execution of the dice rolling mechanics
+        pending_fate = consume_deterministic_fate(player_id)
+        if pending_fate is not None:
+            dices = hdm_dices(nh=effective_nh, fate=pending_fate)
+        else:
+            dices = [randint(1, 6) for _ in range(3)]
+        
+        dice_pool = sum(dices)
+
+        # Embed state initialization
+        ranged_embed = discord.Embed()
+        is_success = False
+        is_critical_success = False
+        is_critical_failure = False
+        critical_failure_dices = []
+
+        # ==========================================
+        # SUCCESS RESOLUTION STATE MACHINE
+        # ==========================================
+        if dice_pool == 18:
+            is_critical_failure = True
+        elif dice_pool == 17:
+            is_critical_failure = True if effective_nh <= 15 else False
+        elif dice_pool <= effective_nh:
+            if dice_pool <= 4 or (effective_nh - dice_pool >= 10):
+                is_critical_success = True
+                is_success = True
+            else:
+                is_success = True
+        else:
+            if dice_pool - effective_nh >= 10:
+                is_critical_failure = True
+
+        # ==========================================
+        # POST-ROLL UTILITY AND DATABASE PERSISTENCE
+        # ==========================================
+        if is_critical_failure:
+            ranged_embed.title = "FALHA CRÍTICA!"
+            ranged_embed.color = discord.Color.brand_red()
+            critical_failure_dices = [randint(1, 6) for _ in range(3)]
+        elif is_success:
+            if is_critical_success:
+                ranged_embed.title = "SUCESSO DECISIVO!"
+                ranged_embed.color = discord.Color.gold()
+            else:
+                ranged_embed.title = "SUCESSO!"
+                ranged_embed.color = discord.Color.green()
+
+            # Resolved scope anomaly: damage_func is now evaluated safely once upon success
+            damage_data = damage_func(st, 0, weapon_dmg)
+            raw_damage = damage_data["damage"]
+            critical_raw_damage = damage_data["critical_damage"]
+            
+            save_current_attack(
+                self.db_connection, raw_damage, damage_type.value, 
+                local.value, feint_value, critical_raw_damage
+            )
+        else:
+            ranged_embed.title = "FALHA"
+            ranged_embed.color = discord.Color.red()
+
+        # ==========================================
+        # UI PRESENTATION GENERATION
+        # ==========================================
+        modifier_sign = "+" if total_modifiers >= 0 else "-"
+        weapon_dmg_sign = "+" if weapon_dmg >= 0 else "-"
+
+        ranged_embed.add_field(
+            name="Modificadores",
+            value=(
+                f"Local Escolhido: {local.name}\n"
+                f"Penalidade de Choque: `-{shock}`\n"
+                f"Bônus de Mira (Aim): `+{aim_modifier}`\n"
+                f"TOTAL: ({local_difficulty}) + ({aim_modifier}) - ({shock}) = `{total_modifiers}`"
+            ),
+            inline=False
+        )
+        
+        ranged_embed.add_field(
+            name="Resultados Balísticos",
+            value=(
+                f"Fórmula de Dano: GdP {weapon_dmg_sign} {abs(weapon_dmg)}\n\n"
+                f"NH Base: {nh}\n"
+                f"NH Efetivo: `{effective_nh}` -> {nh} {modifier_sign} {abs(total_modifiers)}\n"
+                f"Rolagem dos Dados: {dices} = `{dice_pool}`"
+            ),
+            inline=False
+        )
+
+        if is_critical_failure:
+            ranged_embed.add_field(
+                name="Tabela de Falhas Críticas (Armas à Distância)",
+                value=f"Dados: `{critical_failure_dices} = {sum(critical_failure_dices)}`",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=ranged_embed)
+
+    # Def --------------------------------------------------------------
+    @app_commands.command(name="def", description="Realiza uma defesa ativa")
+    @app_commands.describe(
+        nh="Seu nível de habilidade na defesa",
+        rd="Redução de dano no local atacado",
+        receive_atk="Escolha se você vai receber o ataque ou se o usuário recebeu um crítico"
+    )
+    @app_commands.choices(
+        receive_atk=[
+            app_commands.Choice(name="Desistir da Defesa", value=1),
+            app_commands.Choice(name="Crítico do Oponente", value=2)
+        ]
+    )
+    async def defense(
+        self,
+        interaction: discord.Interaction,
+        nh: int,
+        rd: int,
+        receive_atk: app_commands.Choice[int] | None = None
+    ):
+        # Safe extraction of the optional parameter to prevent AttributeError
+        receive_atk_value = receive_atk.value if receive_atk is not None else 0
+        player_id = interaction.user.id
+
+        # Database state collection
+        current_attack = get_current_attack(self.db_connection)
+        dmg_type = current_attack["dmg_type"]
+        hit_location = current_attack["hit_location"]
+        feint = current_attack["feint"]
+        raw_damage = current_attack["raw_damage"]
+        critical_raw_damage = current_attack["critical_damage"]
+        
+        character_data = get_character_profile(self.db_connection, player_id)
+        st = character_data["st"]
+        additional_max_pv = character_data["additional_max_pv"]
+
+        character_resources = get_character_resources(self.db_connection, player_id)
+        current_hp = character_resources["hp"]
+
+        # Hit locations lookup configuration
+        hit_locations_map = {
+            0: "Tronco", 1: "Órgãos Vitais", 2: "Crânio", 3: "Olho", 4: "Rosto",
+            5: "Pescoço", 6: "Virilha", 7: "Braço", 8: "Perna", 9: "Mão", 10: "Pé"
+        }
+
+        defense_embed = discord.Embed()
+        
+        # Core flags for state machine resolution
+        is_waived = (receive_atk_value == 1)
+        is_opponent_critical = (receive_atk_value == 2)
+        is_defense_successful = False
+        is_critical_failure = False
+        
+        effective_nh = max(0, nh - feint)
+
+        # ==========================================
+        # DEFENSE ROLL RESOLUTION PIPELINE
+        # ==========================================
+        if is_waived:
+            defense_embed.title = "DEFESA ABANDONADA"
+            defense_embed.description = "Você optou por não esboçar qualquer reação defensiva."
+            defense_embed.color = discord.Color.dark_red()
+        elif is_opponent_critical:
+            defense_embed.title = "ATAQUE CRÍTICO RECEBIDO"
+            defense_embed.description = "O oponente desferiu um acerto crítico. A defesa é matematicamente impossível."
+            defense_embed.color = discord.Color.magenta()
+        else:
+            # Deterministic fate vs standard RNG execution
+            pending_fate = consume_deterministic_fate(player_id)
+            if pending_fate is not None:
+                dices = hdm_dices(nh=effective_nh, fate=pending_fate)
+            else:
+                dices = [randint(1, 6) for _ in range(3)]
+
+            dice_pool = sum(dices)
+
+            # Strict GURPS success/failure threshold logic
+            if dice_pool == 18:
+                is_critical_failure = True
+            elif dice_pool == 17:
+                is_critical_failure = True if effective_nh <= 15 else False
+            elif dice_pool <= effective_nh:
+                if dice_pool <= 4 or (effective_nh - dice_pool >= 10):
+                    is_defense_successful = True
+                    defense_embed.title = "SUCESSO DECISIVO!"
+                    defense_embed.color = discord.Color.gold()
+                    defense_embed.description = (
+                        "Seu sucesso decisivo transformou o ataque do oponente em uma falha crítica!\n"
+                        "Role o revés na tabela de falhas críticas (MB pág. 556)."
+                    )
+                    critical_dices = [randint(1, 6) for _ in range(3)]
+                    critical_dice_sum = sum(critical_dices)
+                    defense_embed.add_field(
+                        name="Tabela de Falhas Críticas (Oponente)",
+                        value=f"Dados: `{critical_dices} = {critical_dice_sum}`",
+                        inline=False
+                    )
+                else:
+                    is_defense_successful = True
+                    defense_embed.title = "SUCESSO!"
+                    defense_embed.color = discord.Color.green()
+                    defense_embed.description = "Você conseguiu evitar o ataque inimigo."
+            else:
+                if dice_pool - effective_nh >= 10:
+                    is_critical_failure = True
+                
+            if is_critical_failure:
+                defense_embed.title = "FALHA CRÍTICA!"
+                defense_embed.color = discord.Color.brand_red()
+                defense_embed.description = "Sua defesa colapsou fragorosamente."
+            elif not is_defense_successful:
+                defense_embed.title = "FALHA!"
+                defense_embed.color = discord.Color.red()
+                defense_embed.description = "Você foi incapaz de evitar o ataque."
+
+            defense_embed.add_field(
+                name="Rolagem de Defesa",
+                value=f"NH Efetivo: `{nh} - {feint}(finta) = {effective_nh}`\nDados: `{dices} = {dice_pool}`",
+                inline=False
+            )
+
+        # ==========================================
+        # DAMAGE & INJURY CALCULATION PIPELINE
+        # ==========================================
+        suffers_damage = (is_waived or is_opponent_critical or is_critical_failure or not is_defense_successful)
+
+        if suffers_damage:
+            # Determine initial base damage profile
+            chosen_damage = critical_raw_damage if (is_critical_failure or is_opponent_critical) else raw_damage
+            
+            # GURPS Rule: Skull hit location natively provides an extra +2 DR protection
+            effective_rd = rd + 2 if hit_location == 2 else rd
+            
+            # Penetrating damage calculation capped at a logical floor of 0
+            penetrating_damage = max(0, chosen_damage - effective_rd)
+            
+            local_damage_multiplier = 1.0
+            appendage_hp = None
+            amputation = False
+            incapacitation = False
+
+            # Hit location multiplier taxonomy routing
+            if hit_location == 1:  # Vitals
+                if dmg_type in (7, 8, 9, 10, 11):  # Piercing family or Impaling
+                    local_damage_multiplier = 3.0
+            elif hit_location in (2, 3):  # Skull or Eye
+                local_damage_multiplier = 4.0
+            elif hit_location == 4:  # Face
+                if dmg_type == 3:  # Corrosion
+                    local_damage_multiplier = 1.5
+            elif hit_location == 5:  # Neck
+                if dmg_type in (3, 4):  # Corrosion, Crushing
+                    local_damage_multiplier = 1.5
+                elif dmg_type == 5:  # Cutting
+                    local_damage_multiplier = 2.0
+            elif hit_location in (7, 8):  # Limb (Arm/Leg)
+                appendage_hp = (st + additional_max_pv) / 2
+            elif hit_location in (9, 10):  # Extremity (Hand/Foot)
+                appendage_hp = (st + additional_max_pv) / 3
+
+            # Apply multiplier to determine standard injury
+            final_injury = penetrating_damage * local_damage_multiplier
+
+            # Evaluation of appendage crippling thresholds
+            if appendage_hp is not None:
+                if final_injury >= appendage_hp * 2:
+                    amputation = True
+                    final_injury = appendage_hp  # Injury capped at structural maximum
+                elif final_injury >= appendage_hp:
+                    incapacitation = True
+                    final_injury = appendage_hp  # Injury capped at structural maximum
+
+            # Enforcing integer conversion before mutating database state
+            final_injury = int(final_injury)
+            new_hp = current_hp - final_injury
+            set_character_resource(self.db_connection, player_id, "hp", new_hp)
+
+            # Building UI presentation fields for damage impact
+            location_name = hit_locations_map.get(hit_location, "Desconhecido")
+            injury_status_msg = ""
+            if amputation:
+                injury_status_msg = f"\n **{location_name.upper()} AMPUTADO!!**"
+            elif incapacitation:
+                injury_status_msg = f"\n **{location_name.upper()} INCAPACITADO!!**"
+
+            defense_embed.add_field(
+                name="Resolução de Impacto",
+                value=(
+                    f"Local Atingido: **{location_name}**\n"
+                    f"Modificador Anatômico: `{local_damage_multiplier}x`\n\n"
+                    f"Dano Base: `{chosen_damage}`\n"
+                    f"Dano Penetrante: `{chosen_damage} - {effective_rd}(RD) = {penetrating_damage}`\n"
+                    f"`Lesão Total Realizada: {final_injury}`"
+                    f"{injury_status_msg}"
+                ),
+                inline=False
+            )
+            defense_embed.add_field(
+                name="Métricas Vitais do Personagem",
+                value=f"PV Anterior: `{current_hp}`\nPV Atual: `{new_hp}`",
+                inline=False
+            )
+        else:
+            # Shielding metrics if the defensive maneuver was flawless
+            defense_embed.add_field(
+                name="Métricas Vitais do Personagem",
+                value=f"Integridade preservada. PV permanece em `{current_hp}`.",
+                inline=False
+            )
+
+        # Unified single payload transmission
+        await interaction.response.send_message(embed=defense_embed)
+
 
     # Fnt ---------------------------------------------------------
     @app_commands.command(description="Realiza uma finta")
@@ -661,7 +1154,7 @@ class Battle(commands.Cog):
         await interaction.response.send_message(f"{aim_value}º Turno apontando.")
     
     # Avaliaar (evaluate command) -------------------------------------------
-    @app_commands.command(name="avaliar",description="Estuda o oponente para conseguir um bônus na próxima rolagem")
+    @app_commands.command(name="eval",description="Estuda o oponente para conseguir um bônus na próxima rolagem")
     async def evaluate(self, interaction: discord.Interaction):
         player_id = interaction.user.id
         #   cleaning up the tables

@@ -3,6 +3,7 @@ CREATE TABLE "additional_stats" (
 	"stat"	TEXT UNIQUE,
 	PRIMARY KEY("id_additional_stat" AUTOINCREMENT)
 );
+CREATE TABLE sqlite_sequence(name,seq);
 CREATE TABLE "skills" (
 	"skill_id"	INTEGER NOT NULL UNIQUE,
 	"name"	TEXT,
@@ -11,17 +12,6 @@ CREATE TABLE "skills" (
 	"difficulty"	TEXT,
 	"description"	TEXT,
 	PRIMARY KEY("skill_id" AUTOINCREMENT)
-);
-CREATE TABLE "magics" (
-	"magic_id"	INTEGER NOT NULL UNIQUE,
-	"name"	TEXT,
-	"attribute"	TEXT,
-	"modifier"	INTEGER,
-	"difficulty"	TEXT,
-	"cost"	INTEGER,
-	"resource" TEXT,
-	"description"	TEXT,
-	PRIMARY KEY("magic_id" AUTOINCREMENT)
 );
 CREATE TABLE "character_additional_stats" (
 	"character_additional_stat_id" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +31,7 @@ CREATE TABLE "current_attacks" (
 	"dmg_type"	INTEGER,
 	"hit_location"	INTEGER,
 	"feint"	INTEGER,
-	"critical" INTEGER,
+	"critical_damage" INTEGER,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 CREATE TABLE "next_turn_conditions" (
@@ -92,4 +82,24 @@ CREATE TABLE "character_magics" (
 	PRIMARY KEY("character_magic_id" AUTOINCREMENT),
 	FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
 	FOREIGN KEY("magic_id") REFERENCES "magic"("magic_id") ON DELETE CASCADE
+);
+CREATE TABLE "magics" (
+	"magic_id"	INTEGER NOT NULL UNIQUE,
+	"name"	TEXT,
+	"attribute"	TEXT,
+	"modifier"	INTEGER,
+	"difficulty"	TEXT,
+	"cost"	INTEGER,
+	"resource_id"	INTEGER,
+	"description"	TEXT,
+	PRIMARY KEY("magic_id" AUTOINCREMENT),
+	FOREIGN KEY("resource_id") REFERENCES "character_resource_pools"("id") ON DELETE CASCADE,
+);
+CREATE TABLE "character_resource_pools" (
+	"id"	INTEGER,
+	"character_id"	INTEGER,
+	"resource"	TEXT,
+	"value"	INTEGER,
+	PRIMARY KEY("id"),
+	FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
 );
