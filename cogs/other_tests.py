@@ -9,9 +9,7 @@ from utils.dice_mechanics import hdm_dices
 
 
 class Other_tests(commands.Cog):
-    """
-    
-    """
+    """ """
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -24,7 +22,9 @@ class Other_tests(commands.Cog):
         num_dados="Número de dados que serão rolados",
         modificador="Qualquer modificador que precise ser aplicado",
     )
-    async def roll(self, interact: discord.Interaction, num_dados: int, modificador: int):
+    async def roll(
+        self, interact: discord.Interaction, num_dados: int, modificador: int
+    ):
         dices = [randint(1, 6) for _ in range(num_dados)]
         dice_pool = sum(dices)
 
@@ -40,7 +40,6 @@ class Other_tests(commands.Cog):
 
         await interact.response.send_message(embed=roll_embed)
 
-
     # Reaction Test ---------------------------------------------------
     @app_commands.command(description="Realiza a rolagem de um teste de reação")
     @app_commands.describe(modificador="Soma dos modificadores de reação que você tem")
@@ -54,7 +53,6 @@ class Other_tests(commands.Cog):
         fate = consume_deterministic_fate(player_id)
 
         if fate is not None:
-
 
             # Safeguards: The minimum and maximum that 3d6 can roll with the current modifier
             min_possible = 3 + modificador
@@ -137,16 +135,20 @@ class Other_tests(commands.Cog):
         react_embed.add_field(
             name="Dados",
             value=f"`Dados: {dices} = {dice_pool}`\nModificador: {modificador}\n\n**Total: {total}**",
-            inline= False
+            inline=False,
         )
 
         await interact.response.send_message(embed=react_embed)
 
-
     # Panic -----------------------------------------------------------
     @app_commands.command(description="Realiza uma verificação de Pânico")
-    @app_commands.describe(vontade="Seu Valor de Vontade", modificador="Soma dos modificadores de dificuldade")
-    async def panic(self, interact: discord.Interaction, vontade:int, modificador:int):
+    @app_commands.describe(
+        vontade="Seu Valor de Vontade",
+        modificador="Soma dos modificadores de dificuldade",
+    )
+    async def panic(
+        self, interact: discord.Interaction, vontade: int, modificador: int
+    ):
         player_id = interact.user.id
 
         # Dice Roll
@@ -160,7 +162,7 @@ class Other_tests(commands.Cog):
 
         dice_pool = sum(dices)
         effective_nh = vontade + modificador
-        
+
         if effective_nh < 0:  # Ensures effective NH is never less than 0
             effective_nh = 0
 
@@ -229,7 +231,9 @@ class Other_tests(commands.Cog):
 
             panic_value = dice_pool_panic + (dice_pool - effective_nh)
 
-            panic_embed.description = "Tabela de pânico pode ser encontrada em GURPS Módulo Básico Pág: 361"
+            panic_embed.description = (
+                "Tabela de pânico pode ser encontrada em GURPS Módulo Básico Pág: 361"
+            )
             panic_embed.add_field(
                 name="Valor do teste de Pânico",
                 value=panic_value,

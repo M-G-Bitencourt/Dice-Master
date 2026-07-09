@@ -8,10 +8,9 @@ from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
 from utils.test_mechanics import quick_dispute
 
+
 class Skill_tests(commands.Cog):
-    """
-    
-    """
+    """ """
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -22,7 +21,7 @@ class Skill_tests(commands.Cog):
         nh="Seu Nível de Habilidade na perícia",
         modificador="Modificador de Dificuldade",
     )
-    async def test( self, interact: discord.Interaction, nh: int, modificador: int):
+    async def test(self, interact: discord.Interaction, nh: int, modificador: int):
 
         player_id = interact.user.id
 
@@ -107,7 +106,6 @@ class Skill_tests(commands.Cog):
 
         await interact.response.send_message(embed=test_embed)
 
-
     # qkd Command
     @app_commands.command(description="Realiza uma disputá Rápida de habilidades")
     @app_commands.describe(
@@ -187,7 +185,7 @@ class Skill_tests(commands.Cog):
         qkd_embed.add_field(
             name="Diferença das Margens de Sucesso",
             value=f"`{margin1} - ({margin2}) = {margin1 - margin2}`",
-            inline=False
+            inline=False,
         )
 
         await interact.response.send_message(embed=qkd_embed)
