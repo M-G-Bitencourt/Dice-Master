@@ -9,7 +9,7 @@ BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 DATABASE_FILE_PATH = BASE_DIRECTORY / "data" / "database.db"
 
 
-class DeterministicMock(commands.Cog):
+class Admin(commands.Cog):
     """
     Cog responsible for overriding standard dice rolls with deterministic outcomes.
     Restricted to administrative usage for debugging and narrative control.
@@ -89,8 +89,9 @@ class DeterministicMock(commands.Cog):
         )
 
 
+
 async def setup(bot: commands.Bot):
     """
     Asynchronous entry point required by discord.py to load the extension.
     """
-    await bot.add_cog(DeterministicMock(bot))
+    await bot.add_cog(Admin(bot))

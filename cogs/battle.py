@@ -1,10 +1,10 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
-
 from random import randint
 import sqlite3
 from pathlib import Path
+
+import discord
+from discord import app_commands
+from discord.ext import commands
 
 from utils.test_mechanics import quick_dispute
 from utils.dice_mechanics import consume_deterministic_fate
