@@ -149,20 +149,6 @@ class Battle(commands.Cog):
         self.db_connection = sqlite3.connect(database_path)
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
-        # Create the body parts dict with the difficulty
-        self.body_parts_difficulty = {
-            "Tronco (0)": 0,
-            "Órgãos Vitais (-3)": -3,
-            "Crânio (-7)": -7,
-            "Olho (-9)": -9,
-            "Rosto (-5)": -5,
-            "Pescoço (-5)": -5,
-            "Virilha (-3)": -3,
-            "Braço (-2)": -2,
-            "Perna (-2)": -2,
-            "Mão (-4)": -4,
-            "Pé (-4)": -4,
-        }
 
     # Damage Command ------------------------------------------------
     @app_commands.command(description="Calcula dano de um ataque")
