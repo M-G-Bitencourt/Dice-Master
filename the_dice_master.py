@@ -52,7 +52,7 @@ class DiceMasterBot(commands.Bot):
         """
         extensions = [
             "cogs.battle",
-            "cogs.deterministic_mock",
+            "cogs.admin",
             "cogs.other_tests",
             "cogs.skill_test",
         ]

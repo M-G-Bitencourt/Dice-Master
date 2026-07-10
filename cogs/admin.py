@@ -43,7 +43,7 @@ class Admin(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        jogador="O jogador que terá o teste alterado",
+        player="O jogador que terá o teste alterado",
         fate="Escolha de qual será o próximo resultado do usuário",
     )
     @app_commands.choices(
@@ -57,7 +57,7 @@ class Admin(commands.Cog):
     async def deterministic_mock_command(
         self,
         interact: discord.Interaction,
-        jogador: discord.Member,
+        player: discord.Member,
         fate: app_commands.Choice[int],
     ):
         # State validation using the pre-loaded instance attribute
@@ -68,7 +68,7 @@ class Admin(commands.Cog):
             )
             return
 
-        player_identifier = jogador.id
+        player_identifier = player.id
         fate_integer_value = fate.value
 
         try:
@@ -94,7 +94,7 @@ class Admin(commands.Cog):
             return
 
         await interact.response.send_message(
-            content=f"A próxima rolagem de {jogador.mention} será {fate.name}",
+            content=f"A próxima rolagem de {player.mention} será {fate.name}",
             ephemeral=True,
         )
 
@@ -112,7 +112,7 @@ class Admin(commands.Cog):
         ]
     )
     @app_commands.describe(
-        jogador="O jogador que terá os recursos alterados",
+        player="O jogador que terá os recursos alterados",
         resource="O recurso que será alterado",
         value="O valor que será somado ou subtraído"
     )
@@ -161,6 +161,102 @@ class Admin(commands.Cog):
         )
 
         await interact.response.send_message(embed=transaction_embed)
+
+    # switch_character --------------------------------------------------
+    async def character_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        """
+        Dynamically queries the database for characters matching the user's keystrokes.
+        Limits the return pool to 25 instances, respecting Discord API constraints.
+        """
+        cursor = self.db_connection.cursor()
+        
+        # SQL Injection defensive parameterization with wildcard
+        search_pattern = f"%{current}%"
+        
+        cursor.execute(
+            """
+            SELECT character_id, name 
+            FROM characters 
+            WHERE name LIKE ? 
+            LIMIT 25
+            """,
+            (search_pattern,)
+        )
+        
+        fetched_characters = cursor.fetchall()
+        
+        return [
+            app_commands.Choice(name=row[1], value=str(row[0]))
+            for row in fetched_characters
+        ]
+
+    @app_commands.command(
+        name="switch_character",
+        description="Transfere o controle do seu usuário para um novo personagem."
+    )
+    @app_commands.autocomplete(character=character_autocomplete)
+    @app_commands.describe(character="O nome do personagem que você deseja assumir.")
+    async def switch_character(
+        self,
+        interaction: discord.Interaction,
+        character: str
+    ):
+        target_player_id = interaction.user.id
+        
+        # Casting the string ID back to an integer for relational integrity
+        try:
+            new_character_id = int(character)
+        except ValueError:
+            await interaction.response.send_message(
+                "Erro de processamento: O identificador do personagem é inválido.", 
+                ephemeral=True
+            )
+            return
+
+        cursor = self.db_connection.cursor()
+
+        # Step 1: Nullify the player_id assignment in the current active character
+        cursor.execute(
+            """
+            UPDATE characters 
+            SET owner_id = NULL 
+            WHERE owner_id = ?
+            """,
+            (target_player_id,)
+        )
+
+        # Step 2: Assign the player_id to the newly selected character
+        cursor.execute(
+            """
+            UPDATE characters 
+            SET owner_id = ? 
+            WHERE character_id = ?
+            """,
+            (target_player_id, new_character_id)
+        )
+
+        self.db_connection.commit()
+
+        # Ephemeral retrieval of the new character's nomenclature for the UI validation
+        cursor.execute(
+            "SELECT name FROM characters WHERE character_id = ?", 
+            (new_character_id,)
+        )
+        row = cursor.fetchone()
+        new_character_name = row[0] if row else "Entidade Desconhecida"
+
+        # Tactical UI Response
+        transference_embed = discord.Embed(
+            title="Sincronização de Avatar Concluída",
+            description=f"{interaction.user.mention} agora está jogando com **{new_character_name}**.",
+            color=discord.Color.teal()
+        )
+
+        await interaction.response.send_message(embed=transference_embed)
 
 async def setup(bot: commands.Bot):
     """
