@@ -55,6 +55,7 @@ class DiceMasterBot(commands.Bot):
             "cogs.admin",
             "cogs.other_tests",
             "cogs.skill_test",
+            "cogs.sheet"
         ]
 
         for extension in extensions:

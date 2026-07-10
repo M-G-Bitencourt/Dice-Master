@@ -77,7 +77,7 @@ CREATE TABLE "magics" (
     "difficulty" TEXT,
     "cost" INTEGER,
     "resource_id" TEXT,
-    "description" TEXT,
+    "description" TEXT
 );
 
 -- 4. Tabelas Associativas Múltiplas (Com Cascata Estrita)
