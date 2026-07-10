@@ -27,6 +27,7 @@ class Admin(commands.Cog):
 
         # Establishing the persistent, active connection channel
         self.db_connection = sqlite3.connect(database_path)
+        self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
         # Strict Dependency Injection: Extracting configuration from the injected bot memory.
         try:

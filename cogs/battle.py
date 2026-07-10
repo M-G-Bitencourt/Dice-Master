@@ -147,6 +147,7 @@ class Battle(commands.Cog):
 
         # Establishing the persistent, active connection channel
         self.db_connection = sqlite3.connect(database_path)
+        self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
         # Create the body parts dict with the difficulty
         self.body_parts_difficulty = {
