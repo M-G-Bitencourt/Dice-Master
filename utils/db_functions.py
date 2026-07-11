@@ -183,22 +183,22 @@ def get_character_strength(connection: sqlite3.Connection, owner_id: int) -> int
 
 def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict:
     """
-    Retrieves the comprehensive attribute matrix for a specific character
-    designated by the owner's unique Discord identifier.
+    Retrieves the exact attribute matrix for a specific character based exclusively
+    on the denormalized 20-column schema, omitting any extraneous statistical queries.
     """
     cursor = connection.cursor()
 
-    # Explicitly listing all 17 columns to avoid the fragility of SELECT *
     cursor.execute(
         """
         SELECT 
             character_id, owner_id, is_npc, name, st, dx, iq, ht, 
             additional_max_pv, additional_vont, additional_per, 
             additional_max_pf, additional_basic_speed, additional_basic_move, 
-            energy_reserve, normal_diffuse_homogeneous_unded, money
+            energy_reserve, normal_diffuse_homogeneous_unded, money,
+            current_pv, current_pf, current_er
         FROM characters 
         WHERE owner_id = ?
-    """,
+        """,
         (owner_id,),
     )
 
@@ -227,60 +227,56 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
         "energy_reserve": row[14],
         "normal_diffuse_homogeneous_unded": row[15],
         "money": row[16],
+        "current_pv": row[17],
+        "current_pf": row[18],
+        "current_er": row[19],
     }
-
-
-# SQL FUNCTIONS (character_resource_pools)
-def get_character_resources(connection: sqlite3.Connection, player_id: int) -> dict:
-    """
-    Retrieves all volatile resource pools for a given player and constructs a dictionary mapping.
-    Raises ValueError if the player lacks an assigned character.
-    """
-    character_id = _resolve_character_id(connection, player_id)
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT resource, value 
-        FROM character_resource_pools 
-        WHERE character_id = ?
-        """,
-        (character_id,),
-    )
-
-    rows = cursor.fetchall()
-
-    # Dictionary comprehension for optimal mapping: {"HP": 10, "FP": 12}
-    return {row[0]: row[1] for row in rows}
 
 
 def set_character_resource(
     connection: sqlite3.Connection, player_id: int, resource_name: str, new_value: int
 ) -> None:
     """
-    Mutates the absolute value of a specific resource pool for a character.
-    If the resource does not exist in the relational schema, it automatically instantiates it.
+    Mutates the absolute value of a specific volatile resource directly 
+    within the foundational character matrix.
     """
     character_id = _resolve_character_id(connection, player_id)
+    
+    # Strict lexical mapping to prevent SQL Injection and ensure schema compliance.
+    # This guarantees that regardless of what the Discord interface sends (hp, pv, current_pv),
+    # the exact foundational column is targeted.
+    column_mapping = {
+        "hp": "current_pv", "pv": "current_pv", "current_pv": "current_pv",
+        "fp": "current_pf", "pf": "current_pf", "current_pf": "current_pf",
+        "er": "current_er", "re": "current_er", "current_er": "current_er"
+    }
+    
+    sanitized_resource = resource_name.lower()
+    
+    if sanitized_resource not in column_mapping:
+        raise ValueError(
+            f"Lexical Anomaly: The resource '{resource_name}' does not map to any known volatile column."
+        )
+        
+    target_column = column_mapping[sanitized_resource]
     cursor = connection.cursor()
 
+    # String interpolation is strictly necessary as SQLite prohibits parameterizing column names.
+    # It is mathematically safe here due to the hermetic validation of the column_mapping dictionary.
     cursor.execute(
-        """
-        UPDATE character_resource_pools 
-        SET value = ? 
-        WHERE character_id = ? AND resource = ?
+        f"""
+        UPDATE characters 
+        SET {target_column} = ? 
+        WHERE character_id = ?
         """,
-        (new_value, character_id, resource_name),
+        (new_value, character_id),
     )
 
-    # Structural fallback: If no rows were mutated, the resource metric is absent.
+    # Structural fallback: Since the denormalized paradigm dictates resources are inherent 
+    # to the character row, a failure to mutate implies the character entity has been purged.
     if cursor.rowcount == 0:
-        cursor.execute(
-            """
-            INSERT INTO character_resource_pools (character_id, resource, value)
-            VALUES (?, ?, ?)
-            """,
-            (character_id, resource_name, new_value),
+        raise ValueError(
+            f"Relational Anomaly: Character entity {character_id} is absent from the foundational matrix."
         )
 
     connection.commit()

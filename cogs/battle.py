@@ -585,6 +585,9 @@ class Battle(commands.Cog):
         rd: int,
         receive_atk: app_commands.Choice[int] | None = None,
     ):
+        # 1. TEMPORAL AXIOM: Immediate deferral to expand execution window to 15 minutes
+        await interaction.response.defer(ephemeral=False)
+
         # Safe extraction of the optional parameter to prevent AttributeError
         receive_atk_value = receive_atk.value if receive_atk is not None else 0
         player_id = interaction.user.id
@@ -597,12 +600,18 @@ class Battle(commands.Cog):
         raw_damage = current_attack["raw_damage"]
         critical_raw_damage = current_attack["critical_damage"]
 
-        character_data = get_character_profile(self.db_connection, player_id)
+        # 2. STRICT MATRIX EXTRACTION: Utilizing the denormalized profile function exclusively
+        try:
+            character_data = get_character_profile(self.db_connection, player_id)
+        except ValueError as e:
+            await interaction.followup.send(f"Erro de processamento: {e}")
+            return
+
         st = character_data["st"]
         additional_max_pv = character_data["additional_max_pv"]
-
-        character_resources = get_character_resources(self.db_connection, player_id)
-        current_hp = character_resources["hp"]
+        
+        # Lexical correction: The dictionary key is now 'current_pv'
+        current_hp = character_data["current_pv"]
 
         # Hit locations lookup configuration
         hit_locations_map = {
@@ -762,6 +771,9 @@ class Battle(commands.Cog):
             # Enforcing integer conversion before mutating database state
             final_injury = int(final_injury)
             new_hp = current_hp - final_injury
+            
+            # 3. Database state mutation: Using the translated string "hp" which is safely 
+            # mapped to "current_pv" internally by our new set_character_resource function.
             set_character_resource(self.db_connection, player_id, "hp", new_hp)
 
             # Building UI presentation fields for damage impact
@@ -797,8 +809,8 @@ class Battle(commands.Cog):
                 inline=False,
             )
 
-        # Unified single payload transmission
-        await interaction.response.send_message(embed=defense_embed)
+        # 4. MANDATORY FOLLOWUP: The original response channel was consumed by .defer()
+        await interaction.followup.send(embed=defense_embed)
 
     # Fnt ---------------------------------------------------------
     @app_commands.command(description="Realiza uma finta")

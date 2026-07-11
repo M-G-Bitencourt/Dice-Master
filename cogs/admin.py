@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from pathlib import Path
 
-from utils.db_functions import get_character_resources
+
 from utils.db_functions import set_character_resource
 from utils.db_functions import get_character_profile
 
@@ -109,7 +109,7 @@ class Admin(commands.Cog):
         resource=[
             app_commands.Choice(name="pv", value="hp"),
             app_commands.Choice(name="pf", value="fp"),
-            app_commands.Choice(name="re", value="er"),
+            app_commands.Choice(name="er", value="er"),
         ]
     )
     @app_commands.describe(
@@ -117,32 +117,44 @@ class Admin(commands.Cog):
         resource="O recurso que será alterado",
         value="O valor que será somado ou subtraído"
     )
-    async def character_resource_pool(
+    async def manage_character_resource_pool(
         self,
         interact: discord.Interaction,
         player: discord.Member,
         resource: app_commands.Choice[str],
         value: int
     ):
-        target_player_id = player.id
-        
-        # Coercing the integer ID to a string to satisfy the TEXT schema and type hints
-        resource_key = str(resource.value)
+        # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
+        await interact.response.defer(ephemeral=False)
 
-        # Correct invocation: retrieving the full dictionary of resources (expects exactly 2 arguments)
-        character_resources = get_character_resources(self.db_connection, target_player_id)
-        character_data = get_character_profile(self.db_connection, player.id)
+        target_player_id = player.id
+        resource_key = resource.value
+
+        # 2. Strict Matrix Extraction: Utilizing ONLY the denormalized profile function
+        try:
+            character_data = get_character_profile(self.db_connection, target_player_id)
+        except ValueError as e:
+            await interact.followup.send(f"Erro de processamento: {e}")
+            return
+
         character_name = character_data["name"]
         
-        # Extracting the specific resource safely from the dictionary, defaulting to 0 if absent
-        current_value = character_resources.get(resource_key, 0)
+        # 3. Lexical Translation: Mapping the Discord choice to the database dictionary keys
+        reading_map = {
+            "hp": "current_pv", 
+            "fp": "current_pf", 
+            "er": "current_er"
+        }
+        
+        dict_key = reading_map[resource_key]
+        current_value = character_data[dict_key]
             
         new_value = current_value + value
 
-        # Database state mutation utilizing the exact string key
+        # 4. Database state mutation: set_character_resource handles the SQL mapping internally
         set_character_resource(self.db_connection, target_player_id, resource_key, new_value)
 
-        # UI Presentation Pipeline
+        # 5. UI Presentation Pipeline
         modifier_sign = "+" if value >= 0 else ""
         
         transaction_embed = discord.Embed(
@@ -153,15 +165,16 @@ class Admin(commands.Cog):
         transaction_embed.add_field(
             name="Balanço da Mutação",
             value=(
-                f"Personagem: {character_name} "
+                f"Personagem: `{character_name}`\n"
                 f"Recurso Afetado: `{resource.name.upper()}`\n"
                 f"Modificador Aplicado: `{modifier_sign}{value}`\n"
-                f"Transição de Estado: `{current_value}` -> `{new_value}`"
+                f"Transição de Estado: `{current_value}` ➡️ `{new_value}`"
             ),
             inline=False
         )
 
-        await interact.response.send_message(embed=transaction_embed)
+        # 6. MANDATORY FOLLOWUP: The initial interaction token was consumed by .defer()
+        await interact.followup.send(embed=transaction_embed)
 
     # switch_character --------------------------------------------------
     async def character_autocomplete(

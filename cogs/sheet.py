@@ -6,7 +6,6 @@ from pathlib import Path
 import sqlite3
 
 from utils.db_functions import get_character_profile
-from utils.db_functions import get_character_resources
 
 class Sheet(commands.Cog):
     """
@@ -28,34 +27,40 @@ class Sheet(commands.Cog):
         name="sheet",
         description="Envia sua ficha de personagem no chat como uma mensagem efêmera"
     )
-    async def sheet(self, interaction: discord.Interaction,):
+    async def sheet(self, interaction: discord.Interaction):
+        # Immediate deferral to respect Discord's temporal strictures.
+        await interaction.response.defer(ephemeral=True)
         
         player_id = interaction.user.id
-        character = get_character_profile(self.db_connection, player_id)
+        
+        try:
+            character = get_character_profile(self.db_connection, player_id)
+        except ValueError as e:
+            # Capturing database anomalies if the user lacks an active character matrix
+            await interaction.followup.send(f"Erro de processamento: {e}", ephemeral=True)
+            return
 
         name = character["name"]
-        # Basic Atributes
+        
+        # Basic Attributes
         st = character["st"]
         dx = character["dx"]
         iq = character["iq"]
         ht = character["ht"]
-        er = character["energy_reserve"]
-        # secondary characteristics
+        base_er = character["energy_reserve"]
+        
+        # Secondary Characteristics
         max_pv = int(st) + int(character["additional_max_pv"])
         max_pf = int(ht) + int(character["additional_max_pf"])
-        vont = int(iq) +int(character["additional_vont"])
+        vont = int(iq) + int(character["additional_vont"])
         per = int(iq) + int(character["additional_per"])
 
-        # Other Stats
-        character_resource = get_character_resources(self.db_connection, player_id)
+        # Volatile Resources extracted directly from the denormalized foundational matrix
+        current_pv = character["current_pv"]
+        current_pf = character["current_pf"]
+        current_er = character["current_er"]
 
-        character_resource_str = "".join(
-            f"**{resource_name.upper()}:** `{resource_value}`\n" 
-            for resource_name, resource_value in character_resource.items()
-        )
-
-        sheet_embed = discord.Embed(title=f"**{name}**")
-        sheet_embed.color = discord.Color.gold()
+        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold())
 
         sheet_embed.add_field(
             name="Atributos Básicos",
@@ -64,7 +69,7 @@ class Sheet(commands.Cog):
                 f"**DX:** `{dx}`\n"
                 f"**IQ:** `{iq}`\n"
                 f"**HT:** `{ht}`\n"
-                f"**ER:** `{er}`"
+                f"**ER:** `{base_er}`"
             ),
             inline=False
         )
@@ -80,14 +85,19 @@ class Sheet(commands.Cog):
             inline=False
         )
 
+        # Inline formatting, completely eradicating the superfluous intermediate variable
         sheet_embed.add_field(
-            name="PV - PF - ER",
-            value=character_resource_str,
+            name="Recursos Atuais (PV - PF - ER)",
+            value=(
+                f"**PV:** `{current_pv}`\n"
+                f"**PF:** `{current_pf}`\n"
+                f"**ER:** `{current_er}`"
+            ),
             inline=False
         )
         
-
-        await interaction.response.send_message(embed=sheet_embed, ephemeral=True)
+        # Mandatory followup via webhook, transmitting the final embed
+        await interaction.followup.send(embed=sheet_embed, ephemeral=True)
 
 async def setup(bot: commands.Bot):
     """

@@ -31,7 +31,10 @@ CREATE TABLE "characters" (
     "additional_basic_move" INTEGER DEFAULT 0,
     "energy_reserve" INTEGER DEFAULT 0,
     "normal_diffuse_homogeneous_unded" INTEGER DEFAULT 0,
-    "money" INTEGER DEFAULT 0
+    "money" INTEGER DEFAULT 0,
+    "current_pv" INTEGER DEFAULT 0,
+    "current_pf" INTEGER DEFAULT 0,
+    "current_er" INTEGER DEFAULT 0
 );
 
 CREATE TABLE "hdm" (
@@ -59,13 +62,6 @@ CREATE TABLE "next_turn_conditions" (
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE
 );
 
-CREATE TABLE "character_resource_pools" (
-    "id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER,
-    "resource" TEXT,
-    "value" INTEGER,
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE
-);
 
 -- 3. Entidades Orbitais de Magia
 
