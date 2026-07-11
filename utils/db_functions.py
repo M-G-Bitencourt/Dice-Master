@@ -1,4 +1,6 @@
+import discord
 import sqlite3
+from pathlib import Path
 
 # SQL FUNCTIONS (next_turn_conditions)
 VALID_COLUMNS = {
@@ -281,3 +283,41 @@ def set_character_resource(
 
     connection.commit()
 
+def get_character_thumbnail_by_id(connection: sqlite3.Connection, character_id: int) -> tuple[discord.File | None, str | None]:
+    """
+    Core asset pipeline. Resolves character image path using the primary key
+    and builds the binary stream and attachment URL for the Discord API.
+    """
+    project_root = Path(__file__).resolve().parent.parent
+    image_directory = project_root / "data" / "images" / "characters"
+    
+    image_path = image_directory / f"{character_id}.png"
+    default_fallback_path = image_directory / "default_character.png"
+
+    # Validation pipeline to shield against FileNotFoundError
+    if not image_path.exists():
+        if default_fallback_path.exists():
+            image_path = default_fallback_path
+        else:
+            return None, None
+
+    # Using the verified character_id to map the network attachment name
+    sealed_filename = f"char_{character_id}.png"
+    
+    discord_file = discord.File(image_path, filename=sealed_filename)
+    attachment_url = f"attachment://{sealed_filename}"
+
+    return discord_file, attachment_url
+
+
+def get_character_thumbnail_payload(connection: sqlite3.Connection, player_id: int) -> tuple[discord.File | None, str | None]:
+    """
+    Convenience wrapper for player-facing commands. Resolves the player_id
+    to a character_id before invoking the core asset pipeline.
+    """
+    try:
+        character_id = _resolve_character_id(connection, player_id)
+    except ValueError:
+        return None, None
+
+    return get_character_thumbnail_by_id(connection, character_id)

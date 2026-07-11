@@ -6,6 +6,8 @@ from pathlib import Path
 import sqlite3
 
 from utils.db_functions import get_character_profile
+from utils.db_functions import get_character_thumbnail_payload
+from utils.db_functions import get_character_thumbnail_by_id
 
 class Sheet(commands.Cog):
     """
@@ -129,9 +131,14 @@ class Sheet(commands.Cog):
             ),
             inline=False
         )
-        
+        # images
+        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+
+        if thumbnail_url:
+            sheet_embed.set_thumbnail(url=thumbnail_url)
+
         # Mandatory followup via webhook, transmitting the final embed
-        await interaction.followup.send(embed=sheet_embed, ephemeral=True)
+        await interaction.followup.send(embed=sheet_embed, file=character_file, ephemeral=True)
 
 
     @app_commands.command(
@@ -240,8 +247,14 @@ class Sheet(commands.Cog):
             inline=False
         )
         
+        # images
+        character_file, thumbnail_url = get_character_thumbnail_by_id(self.db_connection, target_character_id)
+
+        if thumbnail_url:
+            sheet_view_embed.set_thumbnail(url=thumbnail_url)
+
         # Mandatory followup via webhook, transmitting the final diagnostic embed
-        await interaction.followup.send(embed=sheet_view_embed, ephemeral=True)
+        await interaction.followup.send(embed=sheet_view_embed, ephemeral=True, file=character_file)
 
 
 async def setup(bot: commands.Bot):
