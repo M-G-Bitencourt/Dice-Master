@@ -99,7 +99,7 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    # character_resource_pool --------------------------------------------
+    # manage_character_resource_pool --------------------------------------------
     @app_commands.command(
         name="manage_character_resource_pool",
         description="Permite editar o PV o PF e a RE dos jogadores"
@@ -168,13 +168,77 @@ class Admin(commands.Cog):
                 f"Personagem: `{character_name}`\n"
                 f"Recurso Afetado: `{resource.name.upper()}`\n"
                 f"Modificador Aplicado: `{modifier_sign}{value}`\n"
-                f"Transição de Estado: `{current_value}` ➡️ `{new_value}`"
+                f"Transição de Estado: `{current_value}` -> `{new_value}`"
             ),
             inline=False
         )
 
         # 6. MANDATORY FOLLOWUP: The initial interaction token was consumed by .defer()
         await interact.followup.send(embed=transaction_embed)
+
+    # restore_character_resources
+    @app_commands.command(
+        name="restore_character_resources",
+        description="Restaura incondicionalmente todos os recursos vitais aos seus tetos estruturais máximos"
+    )
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(
+        player="O jogador cujo personagem receberá a restauração absoluta"
+    )
+    async def restore_character_resources(
+        self,
+        interact: discord.Interaction,
+        player: discord.Member
+    ):
+        # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
+        await interact.response.defer(ephemeral=False)
+
+        target_player_id = player.id
+
+        # 2. Strict Matrix Extraction: Utilizing the denormalized profile function
+        try:
+            character_data = get_character_profile(self.db_connection, target_player_id)
+        except ValueError as e:
+            await interact.followup.send(f"Erro de processamento: {e}")
+            return
+
+        character_name = character_data["name"]
+
+        # 3. Maximum Threshold Calculation based on GURPS strict structural formulas
+        max_pv = character_data["st"] + character_data["additional_max_pv"]
+        max_pf = character_data["ht"] + character_data["additional_max_pf"]
+        max_er = character_data["energy_reserve"]
+
+        # 4. State Capture for historical/UI feedback before mutation
+        old_pv = character_data["current_pv"]
+        old_pf = character_data["current_pf"]
+        old_er = character_data["current_er"]
+
+        # 5. Database state mutation: Maintaining encapsulation by utilizing the setter thrice
+        set_character_resource(self.db_connection, target_player_id, "hp", max_pv)
+        set_character_resource(self.db_connection, target_player_id, "fp", max_pf)
+        set_character_resource(self.db_connection, target_player_id, "er", max_er)
+
+        # 6. UI Presentation Pipeline
+        restoration_embed = discord.Embed(
+            title="Restauração Estrutural Absoluta",
+            description=f"Os fluxos vitais do personagem pertencente ao indivíduo {player.mention} foram compulsoriamente elevados aos seus limites sistêmicos.",
+            color=discord.Color.brand_green()
+        )
+        
+        restoration_embed.add_field(
+            name="Balanço da Mutação",
+            value=(
+                f"Personagem: `{character_name}`\n\n"
+                f"**PV (Hit Points):** `{old_pv}` ➡️ `{max_pv}`\n"
+                f"**PF (Fatigue Points):** `{old_pf}` ➡️ `{max_pf}`\n"
+                f"**ER (Energy Reserve):** `{old_er}` ➡️ `{max_er}`"
+            ),
+            inline=False
+        )
+
+        # 7. MANDATORY FOLLOWUP: The initial interaction token was consumed by .defer()
+        await interact.followup.send(embed=restoration_embed)
 
     # switch_character --------------------------------------------------
     async def character_autocomplete(
