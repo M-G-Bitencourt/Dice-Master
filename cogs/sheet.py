@@ -8,6 +8,7 @@ import sqlite3
 from utils.db_functions import get_character_profile
 from utils.db_functions import get_character_thumbnail_payload
 from utils.db_functions import get_character_thumbnail_by_id
+from utils.db_functions import get_character_profile_by_id
 
 class Sheet(commands.Cog):
     """
@@ -91,12 +92,16 @@ class Sheet(commands.Cog):
         vont = int(iq) + int(character["additional_vont"])
         per = int(iq) + int(character["additional_per"])
 
-        # Volatile Resources extracted directly from the denormalized foundational matrix
+        # Volatile Resources
         current_pv = character["current_pv"]
         current_pf = character["current_pf"]
         current_er = character["current_er"]
 
-        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold())
+        # Points
+        current_points = character["current_points"]
+        total_points = character["total_points"]
+
+        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`")
 
         sheet_embed.add_field(
             name="Atributos Básicos",
@@ -154,62 +159,54 @@ class Sheet(commands.Cog):
         character: str
     ):
         # Immediate deferral to respect Discord's temporal strictures.
-        # Ephemeral is set to False assuming the Master might want to share the sheet publicly, 
-        # but you may switch this to True if absolute secrecy is required.
-        await interaction.response.defer(ephemeral=False)
+        # Set to False to permit the Master to render the diagnostic metrics to the channel.
+        await interaction.response.defer(ephemeral=True)
 
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.followup.send(
-                "Erro de processamento: O identificador do personagem fornecido é estruturalmente inválido.", 
-                ephemeral=True
+                "Erro de processamento: O identificador do personagem fornecido é estruturalmente inválido."
             )
             return
 
-        cursor = self.db_connection.cursor()
-
-        # Strict extraction bounded by the primary key (character_id) to bypass the owner_id limitation
-        cursor.execute(
-            """
-            SELECT 
-                name, st, dx, iq, ht, 
-                additional_max_pv, additional_vont, additional_per, 
-                additional_max_pf, energy_reserve, 
-                current_pv, current_pf, current_er
-            FROM characters 
-            WHERE character_id = ?
-            """,
-            (target_character_id,)
-        )
-        
-        row = cursor.fetchone()
-
-        if not row:
-            await interaction.followup.send(
-                "Erro de processamento: A entidade solicitada foi obliterada ou não existe na matriz fundacional.", 
-                ephemeral=True
-            )
+        # Invoking the newly minted high-efficiency primary key extraction function
+        try:
+            character_data = get_character_profile_by_id(self.db_connection, target_character_id)
+        except ValueError as e:
+            await interaction.followup.send(f"Erro de processamento: {e}")
             return
 
-        # Explicit unpacking for absolute readability
-        (
-            name, st, dx, iq, ht, 
-            add_max_pv, add_vont, add_per, add_max_pf, 
-            base_er, current_pv, current_pf, current_er
-        ) = row
         
+        name = character_data["name"]
+
+        # Basic Attributes
+        st = character_data["st"]
+        dx = character_data["dx"]
+        iq = character_data["iq"]
+        ht = character_data["ht"]
+        base_er = character_data["energy_reserve"]
+
+
         # Secondary Characteristics calculation (Algebraic evaluation)
-        max_pv = st + add_max_pv
-        max_pf = ht + add_max_pf
-        vont = iq + add_vont
-        per = iq + add_per
+        max_pv = st + character_data["additional_max_pv"]
+        max_pf = ht + character_data["additional_max_pf"]
+        vont = iq + character_data["additional_vont"]
+        per = iq + character_data["additional_per"]
+
+        current_pv = character_data["current_pv"]
+        current_pf = character_data["current_pf"]
+        current_er = character_data["current_er"]
+
+        # Points
+        current_points = character_data["current_points"]
+        total_points = character_data["total_points"]
 
         # Embed Construction Pipeline
         sheet_view_embed = discord.Embed(
             title=f"**{name}**", 
-            description="Inspeção Administrativa de Ficha",
+            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`",
             color=discord.Color.gold()
         )
 
@@ -247,15 +244,18 @@ class Sheet(commands.Cog):
             inline=False
         )
         
-        # images
+        # Binary asset pipeline extraction using the primary key
         character_file, thumbnail_url = get_character_thumbnail_by_id(self.db_connection, target_character_id)
 
         if thumbnail_url:
             sheet_view_embed.set_thumbnail(url=thumbnail_url)
 
-        # Mandatory followup via webhook, transmitting the final diagnostic embed
-        await interaction.followup.send(embed=sheet_view_embed, ephemeral=True, file=character_file)
-
+        # Strict conditional dispatch protecting network payload against NoneType serialization
+        # Slipped to match the ephemeral=False definition established in the deferral phase
+        if character_file is not None:
+            await interaction.followup.send(embed=sheet_view_embed, file=character_file, ephemeral=True)
+        else:
+            await interaction.followup.send(embed=sheet_view_embed,ephemeral=True)
 
 async def setup(bot: commands.Bot):
     """
