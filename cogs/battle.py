@@ -566,7 +566,7 @@ class Battle(commands.Cog):
         await interaction.response.send_message(embed=ranged_embed)
 
     # Def --------------------------------------------------------------
-    @app_commands.command(name="def", description="Realiza uma defesa ativa")
+    @app_commands.command(name="def", description="Realiza uma defesa ativa incorporando morfologia avançada")
     @app_commands.describe(
         nh="Seu nível de habilidade na defesa",
         rd="Redução de dano no local atacado",
@@ -609,23 +609,27 @@ class Battle(commands.Cog):
 
         st = character_data["st"]
         additional_max_pv = character_data["additional_max_pv"]
-        
-        # Lexical correction: The dictionary key is now 'current_pv'
         current_hp = character_data["current_pv"]
+        
+        # Morphological Topology Extraction (0=Normal, 1=Diffuse, 2=Homogeneous, 3=Unliving)
+        body_type = character_data["normal_diffuse_homogeneous_unded"]
 
-        # Hit locations lookup configuration
+        # Structural taxonomies mappings
         hit_locations_map = {
-            0: "Tronco",
-            1: "Órgãos Vitais",
-            2: "Crânio",
-            3: "Olho",
-            4: "Rosto",
-            5: "Pescoço",
-            6: "Virilha",
-            7: "Braço",
-            8: "Perna",
-            9: "Mão",
-            10: "Pé",
+            0: "Tronco", 1: "Órgãos Vitais", 2: "Crânio", 3: "Olho", 
+            4: "Rosto", 5: "Pescoço", 6: "Virilha", 7: "Braço", 
+            8: "Perna", 9: "Mão", 10: "Pé"
+        }
+        
+        topology_map = {
+            0: "Normal", 1: "Difuso", 2: "Homogêneo", 3: "Não-Vivo"
+        }
+
+        damage_types_map = {
+            1: "Atribulação", 2: "Queimadura", 3: "Corrosão", 4: "Contusão",
+            5: "Corte", 6: "Fadiga", 7: "Perfuração", 8: "Pouco Perfurante (Pi-)",
+            9: "Perfurante (Pi)", 10: "Muito Perfurante (Pi+)",
+            11: "Extremamente Perfurante (Pi++)", 12: "Especial", 13: "Toxina"
         }
 
         defense_embed = discord.Embed()
@@ -643,16 +647,13 @@ class Battle(commands.Cog):
         # ==========================================
         if is_waived:
             defense_embed.title = "DEFESA ABANDONADA"
-            defense_embed.description = (
-                "Você optou por não esboçar qualquer reação defensiva."
-            )
+            defense_embed.description = "Você optou por não esboçar qualquer reação defensiva."
             defense_embed.color = discord.Color.dark_red()
         elif is_opponent_critical:
             defense_embed.title = "ATAQUE CRÍTICO RECEBIDO"
             defense_embed.description = "O oponente desferiu um acerto crítico. A defesa é matematicamente impossível."
             defense_embed.color = discord.Color.magenta()
         else:
-            # Deterministic fate vs standard RNG execution
             pending_fate = consume_deterministic_fate(player_id)
             if pending_fate is not None:
                 dices = hdm_dices(nh=effective_nh, fate=pending_fate)
@@ -661,7 +662,6 @@ class Battle(commands.Cog):
 
             dice_pool = sum(dices)
 
-            # Strict GURPS success/failure threshold logic
             if dice_pool == 18:
                 is_critical_failure = True
             elif dice_pool == 17:
@@ -686,9 +686,7 @@ class Battle(commands.Cog):
                     is_defense_successful = True
                     defense_embed.title = "SUCESSO!"
                     defense_embed.color = discord.Color.green()
-                    defense_embed.description = (
-                        "Você conseguiu evitar o ataque inimigo."
-                    )
+                    defense_embed.description = "Você conseguiu evitar o ataque inimigo."
             else:
                 if dice_pool - effective_nh >= 10:
                     is_critical_failure = True
@@ -712,38 +710,44 @@ class Battle(commands.Cog):
         # DAMAGE & INJURY CALCULATION PIPELINE
         # ==========================================
         suffers_damage = (
-            is_waived
-            or is_opponent_critical
-            or is_critical_failure
-            or not is_defense_successful
+            is_waived or is_opponent_critical or is_critical_failure or not is_defense_successful
         )
 
         if suffers_damage:
-            # Determine initial base damage profile
-            chosen_damage = (
-                critical_raw_damage
-                if (is_critical_failure or is_opponent_critical)
-                else raw_damage
-            )
+            chosen_damage = critical_raw_damage if (is_critical_failure or is_opponent_critical) else raw_damage
 
             # GURPS Rule: Skull hit location natively provides an extra +2 DR protection
             effective_rd = rd + 2 if hit_location == 2 else rd
-
-            # Penetrating damage calculation capped at a logical floor of 0
             penetrating_damage = max(0, chosen_damage - effective_rd)
 
-            local_damage_multiplier = 1.0
-            appendage_hp = None
-            amputation = False
-            incapacitation = False
+            # 1. Base Multipliers Assignment (Normal Fleshy Humanoid Baseline)
+            base_multipliers = {
+                1: 1.0,   # Affliction
+                2: 1.0,   # Burn
+                3: 1.0,   # Corrosion
+                4: 1.0,   # Crushing
+                5: 1.5,   # Cutting
+                6: 1.0,   # Fatigue
+                7: 2.0,   # Impaling
+                8: 0.5,   # Pi-
+                9: 1.0,   # Pi
+                10: 1.5,  # Pi+
+                11: 2.0,  # Pi++
+                12: 1.0,  # Special
+                13: 1.0   # Toxic
+            }
+            local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
 
-            # Hit location multiplier taxonomy routing
-            if hit_location == 1:  # Vitals
-                if dmg_type in (7, 8, 9, 10, 11):  # Piercing family or Impaling
-                    local_damage_multiplier = 3.0
-            elif hit_location in (2, 3):  # Skull or Eye
-                local_damage_multiplier = 4.0
-            elif hit_location == 4:  # Face
+            # 2. Hit Location Overrides for Vulnerable internal structures (Bypassed by Homogeneous/Diffuse)
+            if body_type in (0, 3):  # Normal or Unliving
+                if hit_location == 1:  # Vitals
+                    if dmg_type in (7, 8, 9, 10, 11):
+                        local_damage_multiplier = 3.0
+                elif hit_location in (2, 3):  # Skull or Eye
+                    local_damage_multiplier = 4.0
+
+            # External anatomical structures modifiers (Apply across all body types)
+            if hit_location == 4:  # Face
                 if dmg_type == 3:  # Corrosion
                     local_damage_multiplier = 1.5
             elif hit_location == 5:  # Neck
@@ -751,50 +755,105 @@ class Battle(commands.Cog):
                     local_damage_multiplier = 1.5
                 elif dmg_type == 5:  # Cutting
                     local_damage_multiplier = 2.0
-            elif hit_location in (7, 8):  # Limb (Arm/Leg)
+
+            # 3. Morphological Overrides (Unliving & Homogeneous strict rule updates)
+            # Brain/Skull/Eye hits retain their specific x4 lethal multiplier for Unliving, but Vitals do not.
+            if hit_location not in (2, 3):
+                if body_type == 3:  # Unliving (Não-Vivo)
+                    if dmg_type in (7, 11):  # Impaling, Pi++
+                        local_damage_multiplier = 1.0
+                    elif dmg_type == 10:     # Pi+
+                        local_damage_multiplier = 0.5
+                    elif dmg_type == 9:      # Pi
+                        local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 8:      # Pi-
+                        local_damage_multiplier = 0.2
+                elif body_type == 2:  # Homogeneous
+                    if dmg_type in (7, 11):  # Impaling, Pi++
+                        local_damage_multiplier = 0.5
+                    elif dmg_type == 10:     # Pi+
+                        local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 9:      # Pi
+                        local_damage_multiplier = 0.2
+                    elif dmg_type == 8:      # Pi-
+                        local_damage_multiplier = 0.1
+            else:
+                # If a Homogeneous target is hit in Skull/Eye, it has no brain. Override back to torso metrics.
+                if body_type == 2:
+                    if dmg_type in (7, 11): local_damage_multiplier = 0.5
+                    elif dmg_type == 10: local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 9: local_damage_multiplier = 0.2
+                    elif dmg_type == 8: local_damage_multiplier = 0.1
+                    else: local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
+
+            raw_injury = penetrating_damage * local_damage_multiplier
+
+            # 4. Absolute Structural Caps for Diffuse Entities
+            if body_type == 1 and penetrating_damage > 0:
+                if dmg_type in (7, 8, 9, 10, 11):
+                    raw_injury = min(raw_injury, 1.0)
+                else:
+                    raw_injury = min(raw_injury, 2.0)
+
+            # 5. GURPS Minimum Injury Axiom: Penetrating damage cannot yield 0 injury
+            if penetrating_damage > 0 and raw_injury > 0 and raw_injury < 1.0:
+                raw_injury = 1.0
+
+            # Safe conversion to integer for state mutations and crippling calculations
+            raw_injury = int(raw_injury)
+            final_injury = raw_injury
+
+            # 6. Appendage Crippling and Maximum Injury Thresholds Evaluation
+            appendage_hp = None
+            amputation = False
+            incapacitation = False
+
+            if hit_location in (7, 8):    # Limb (Arm/Leg)
                 appendage_hp = (st + additional_max_pv) / 2
             elif hit_location in (9, 10):  # Extremity (Hand/Foot)
                 appendage_hp = (st + additional_max_pv) / 3
 
-            # Apply multiplier to determine standard injury
-            final_injury = penetrating_damage * local_damage_multiplier
-
-            # Evaluation of appendage crippling thresholds
-            if appendage_hp is not None:
-                if final_injury >= appendage_hp * 2:
+            if appendage_hp is not None and body_type in (0, 3):
+                if raw_injury >= appendage_hp * 2:
                     amputation = True
-                    final_injury = appendage_hp  # Injury capped at structural maximum
-                elif final_injury >= appendage_hp:
+                    final_injury = int(appendage_hp)
+                elif raw_injury >= appendage_hp:
                     incapacitation = True
-                    final_injury = appendage_hp  # Injury capped at structural maximum
+                    final_injury = int(appendage_hp)
 
-            # Enforcing integer conversion before mutating database state
-            final_injury = int(final_injury)
             new_hp = current_hp - final_injury
-            
-            # 3. Database state mutation: Using the translated string "hp" which is safely 
-            # mapped to "current_pv" internally by our new set_character_resource function.
             set_character_resource(self.db_connection, player_id, "hp", new_hp)
 
-            # Building UI presentation fields for damage impact
+            # UI Presentation Pipeline Construction
             location_name = hit_locations_map.get(hit_location, "Desconhecido")
+            topology_name = topology_map.get(body_type, "Desconhecido")
+            damage_name = damage_types_map.get(dmg_type, "Especial/Desconhecido")
             injury_status_msg = ""
+            
             if amputation:
-                injury_status_msg = f"\n **{location_name.upper()} AMPUTADO!!**"
+                injury_status_msg = f"\n⚠️ **{location_name.upper()} AMPUTADO!**"
             elif incapacitation:
-                injury_status_msg = f"\n **{location_name.upper()} INCAPACITADO!!**"
+                injury_status_msg = f"\n⚠️ **{location_name.upper()} INCAPACITADO!**"
+
+            # Logic to dynamically show the math without absurd equations
+            if raw_injury > final_injury:
+                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Máximo de Dano que seu {location_name} pode receber)*"
+            else:
+                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {final_injury} PV`"
 
             defense_embed.add_field(
                 name="Resolução de Impacto",
                 value=(
                     f"Local Atingido: **{location_name}**\n"
-                    f"Modificador Anatômico: `{local_damage_multiplier}x`\n\n"
-                    f"Dano Base: `{chosen_damage}`\n"
+                    f"Morfologia do Alvo: `{topology_name}`\n"
+                    f"Tipo de Dano: `{damage_name}`\n"
+                    f"Modificador Anatômico/Morfológico: `{local_damage_multiplier:.1f}x`\n\n"
+                    f"Dano Base Oponente: `{chosen_damage}`\n"
                     f"Dano Penetrante: `{chosen_damage} - {effective_rd}(RD) = {penetrating_damage}`\n"
-                    f"`Lesão Total Realizada: {final_injury}`"
-                    f"{injury_status_msg}"
+                    f"**Lesão Final Aplicada:** {calculation_string}"
+                    f"\n{injury_status_msg}"
                 ),
-                inline=False,
+                inline=False
             )
             defense_embed.add_field(
                 name="Métricas Vitais do Personagem",
@@ -802,14 +861,13 @@ class Battle(commands.Cog):
                 inline=False,
             )
         else:
-            # Shielding metrics if the defensive maneuver was flawless
             defense_embed.add_field(
                 name="Métricas Vitais do Personagem",
-                value=f"Integridade preservada. PV permanece em `{current_hp}`.",
+                value=f"Integridade totalmente preservada. Seu PV permanece estável em `{current_hp}`.",
                 inline=False,
             )
 
-        # 4. MANDATORY FOLLOWUP: The original response channel was consumed by .defer()
+        # Mandatory followup via webhook
         await interaction.followup.send(embed=defense_embed)
 
     # Fnt ---------------------------------------------------------

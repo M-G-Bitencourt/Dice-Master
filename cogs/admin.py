@@ -230,9 +230,9 @@ class Admin(commands.Cog):
             name="Balanço da Mutação",
             value=(
                 f"Personagem: `{character_name}`\n\n"
-                f"**PV (Hit Points):** `{old_pv}` ➡️ `{max_pv}`\n"
-                f"**PF (Fatigue Points):** `{old_pf}` ➡️ `{max_pf}`\n"
-                f"**ER (Energy Reserve):** `{old_er}` ➡️ `{max_er}`"
+                f"**PV (Hit Points):** `{old_pv}` -> `{max_pv}`\n"
+                f"**PF (Fatigue Points):** `{old_pf}` -> `{max_pf}`\n"
+                f"**ER (Energy Reserve):** `{old_er}` -> `{max_er}`"
             ),
             inline=False
         )
