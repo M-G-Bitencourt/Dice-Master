@@ -238,7 +238,7 @@ class Battle(commands.Cog):
             app_commands.Choice(name="Sim", value=1),
         ],
     )
-    async def atk_meele(
+    async def atk_melee(
         self,
         interaction: discord.Interaction,
         nh: int,
@@ -248,6 +248,14 @@ class Battle(commands.Cog):
         damage_type: app_commands.Choice[int],
         strong: app_commands.Choice[int] | None = None,
     ):
+        """
+        Resolves a melee attack roll in GURPS, processing multiple database I/O operations.
+        Secures the network token immediately via deferral to prevent a 3-second timeout.
+        """
+        # CRITICAL AXIOM: Securing the network payload lifetime immediately.
+        # This shields the command against SQLite latency spikes during heavy processing.
+        await interaction.response.defer(ephemeral=False)
+
         strong_value = strong.value if strong is not None else 0
         player_id = interaction.user.id
 
@@ -303,9 +311,7 @@ class Battle(commands.Cog):
         is_critical_failure = False
         critical_failure_dices = []
 
-        # ==========================================
-        # SUCCESS RESOLUTION STATE MACHINE
-        # ==========================================
+        # Success resolution state machine
         if dice_pool == 18:
             is_critical_failure = True
         elif dice_pool == 17:
@@ -320,9 +326,7 @@ class Battle(commands.Cog):
             if dice_pool - effective_nh >= 10:
                 is_critical_failure = True
 
-        # ==========================================
-        # POST-ROLL LOGIC & DATA PERSISTENCE
-        # ==========================================
+        # Post-roll logic and data persistence
         if is_critical_failure:
             atk_melee_embed.title = "FALHA CRÍTICA!"
             atk_melee_embed.color = discord.Color.brand_red()
@@ -335,7 +339,6 @@ class Battle(commands.Cog):
                 atk_melee_embed.title = "SUCESSO!"
                 atk_melee_embed.color = discord.Color.green()
 
-            # Resolved duplication anomaly: damage_func is called exactly once here
             atk_form = 0 if gdp_geb.value == 11 else 1  # 0 for GdP, 1 for GeB
             damage_data = damage_func(st, atk_form, weapon_dmg, strong_value)
             raw_damage = damage_data["damage"]
@@ -353,9 +356,7 @@ class Battle(commands.Cog):
             atk_melee_embed.title = "FALHA"
             atk_melee_embed.color = discord.Color.red()
 
-        # ==========================================
-        # UI PRESENTATION GENERATION
-        # ==========================================
+        # UI presentation generation
         modifier_sign = "+" if total_modifiers >= 0 else "-"
         weapon_dmg_sign = "+" if weapon_dmg >= 0 else "-"
         strong_status_string = "Sim" if strong_value == 1 else "Não"
@@ -390,7 +391,17 @@ class Battle(commands.Cog):
                 inline=False,
             )
 
-        await interaction.response.send_message(embed=atk_melee_embed)
+        # Character visual asset lookup using the wrapper function
+        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+
+        if thumbnail_url:
+            atk_melee_embed.set_thumbnail(url=thumbnail_url)
+    
+        # Secure final dispatch mapped to the non-ephemeral followup payload
+        if character_file is not None:
+            await interaction.followup.send(embed=atk_melee_embed, file=character_file)
+        else:
+            await interaction.followup.send(embed=atk_melee_embed)
 
     # ranged_attack ------------------------------------------------------
     @app_commands.command(
@@ -430,6 +441,14 @@ class Battle(commands.Cog):
         weapon_dmg: int,
         damage_type: app_commands.Choice[int],
     ):
+        """
+        Resolves a ranged ballistic attack roll in GURPS, processing transient states.
+        Secures the network token immediately via deferral to prevent network timeouts.
+        """
+        # CRITICAL AXIOM: Instant network token preservation.
+        # Extends the interaction lifecycle to 15 minutes before any database I/O.
+        await interaction.response.defer(ephemeral=False)
+
         player_id = interaction.user.id
 
         # Internal dictionary mapping to bypass fragile string lookups on local.name
@@ -448,10 +467,13 @@ class Battle(commands.Cog):
         }
         local_difficulty = location_penalties.get(local.value, 0)
 
-        # Database state collection
+        # Database state collection with strict transactional isolation
         aim_value = get_player_condition(self.db_connection, player_id, "aim")
         aim_modifier = min(aim_value, 3) if aim_value is not None else 0
-        shock = get_player_condition(self.db_connection, player_id, "shock")
+        
+        shock_raw = get_player_condition(self.db_connection, player_id, "shock")
+        shock = shock_raw if shock_raw is not None else 0
+        
         st = get_character_strength(self.db_connection, player_id)
 
         # Tactical math correction: Shock is a penalty, it must be subtracted
@@ -479,9 +501,7 @@ class Battle(commands.Cog):
         is_critical_failure = False
         critical_failure_dices = []
 
-        # ==========================================
-        # SUCCESS RESOLUTION STATE MACHINE
-        # ==========================================
+        # Success resolution state machine
         if dice_pool == 18:
             is_critical_failure = True
         elif dice_pool == 17:
@@ -496,9 +516,7 @@ class Battle(commands.Cog):
             if dice_pool - effective_nh >= 10:
                 is_critical_failure = True
 
-        # ==========================================
-        # POST-ROLL UTILITY AND DATABASE PERSISTENCE
-        # ==========================================
+        # Post-roll utility and database persistence
         if is_critical_failure:
             ranged_embed.title = "FALHA CRÍTICA!"
             ranged_embed.color = discord.Color.brand_red()
@@ -511,7 +529,7 @@ class Battle(commands.Cog):
                 ranged_embed.title = "SUCESSO!"
                 ranged_embed.color = discord.Color.green()
 
-            # Resolved scope anomaly: damage_func is now evaluated safely once upon success
+            # Evaluating ballistic damage safely under successful state
             damage_data = damage_func(st, 0, weapon_dmg)
             raw_damage = damage_data["damage"]
             critical_raw_damage = damage_data["critical_damage"]
@@ -528,9 +546,7 @@ class Battle(commands.Cog):
             ranged_embed.title = "FALHA"
             ranged_embed.color = discord.Color.red()
 
-        # ==========================================
-        # UI PRESENTATION GENERATION
-        # ==========================================
+        # UI presentation generation
         modifier_sign = "+" if total_modifiers >= 0 else "-"
         weapon_dmg_sign = "+" if weapon_dmg >= 0 else "-"
 
@@ -563,7 +579,17 @@ class Battle(commands.Cog):
                 inline=False,
             )
 
-        await interaction.response.send_message(embed=ranged_embed)
+        # Character visual asset lookup using the wrapper payload function
+        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+
+        if thumbnail_url:
+            ranged_embed.set_thumbnail(url=thumbnail_url)
+    
+        # Secure final dispatch mapped to the non-ephemeral followup payload
+        if character_file is not None:
+            await interaction.followup.send(embed=ranged_embed, file=character_file)
+        else:
+            await interaction.followup.send(embed=ranged_embed)
 
     # Def --------------------------------------------------------------
     @app_commands.command(name="def", description="Realiza uma defesa ativa incorporando morfologia avançada")
@@ -651,7 +677,7 @@ class Battle(commands.Cog):
             defense_embed.color = discord.Color.dark_red()
         elif is_opponent_critical:
             defense_embed.title = "ATAQUE CRÍTICO RECEBIDO"
-            defense_embed.description = "O oponente desferiu um acerto crítico. A defesa é matematicamente impossível."
+            defense_embed.description = "O oponente desferiu um acerto crítico. A defense é matematicamente impossível."
             defense_embed.color = discord.Color.magenta()
         else:
             pending_fate = consume_deterministic_fate(player_id)
@@ -722,23 +748,12 @@ class Battle(commands.Cog):
 
             # 1. Base Multipliers Assignment (Normal Fleshy Humanoid Baseline)
             base_multipliers = {
-                1: 1.0,   # Affliction
-                2: 1.0,   # Burn
-                3: 1.0,   # Corrosion
-                4: 1.0,   # Crushing
-                5: 1.5,   # Cutting
-                6: 1.0,   # Fatigue
-                7: 2.0,   # Impaling
-                8: 0.5,   # Pi-
-                9: 1.0,   # Pi
-                10: 1.5,  # Pi+
-                11: 2.0,  # Pi++
-                12: 1.0,  # Special
-                13: 1.0   # Toxic
+                1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.5, 6: 1.0, 7: 2.0,
+                8: 0.5, 9: 1.0, 10: 1.5, 11: 2.0, 12: 1.0, 13: 1.0
             }
             local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
 
-            # 2. Hit Location Overrides for Vulnerable internal structures (Bypassed by Homogeneous/Diffuse)
+            # 2. Hit Location Overrides for Vulnerable internal structures
             if body_type in (0, 3):  # Normal or Unliving
                 if hit_location == 1:  # Vitals
                     if dmg_type in (7, 8, 9, 10, 11):
@@ -746,7 +761,7 @@ class Battle(commands.Cog):
                 elif hit_location in (2, 3):  # Skull or Eye
                     local_damage_multiplier = 4.0
 
-            # External anatomical structures modifiers (Apply across all body types)
+            # External anatomical structures modifiers
             if hit_location == 4:  # Face
                 if dmg_type == 3:  # Corrosion
                     local_damage_multiplier = 1.5
@@ -757,28 +772,18 @@ class Battle(commands.Cog):
                     local_damage_multiplier = 2.0
 
             # 3. Morphological Overrides (Unliving & Homogeneous strict rule updates)
-            # Brain/Skull/Eye hits retain their specific x4 lethal multiplier for Unliving, but Vitals do not.
             if hit_location not in (2, 3):
                 if body_type == 3:  # Unliving (Não-Vivo)
-                    if dmg_type in (7, 11):  # Impaling, Pi++
-                        local_damage_multiplier = 1.0
-                    elif dmg_type == 10:     # Pi+
-                        local_damage_multiplier = 0.5
-                    elif dmg_type == 9:      # Pi
-                        local_damage_multiplier = 1.0 / 3.0
-                    elif dmg_type == 8:      # Pi-
-                        local_damage_multiplier = 0.2
+                    if dmg_type in (7, 11): local_damage_multiplier = 1.0
+                    elif dmg_type == 10: local_damage_multiplier = 0.5
+                    elif dmg_type == 9: local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 8: local_damage_multiplier = 0.2
                 elif body_type == 2:  # Homogeneous
-                    if dmg_type in (7, 11):  # Impaling, Pi++
-                        local_damage_multiplier = 0.5
-                    elif dmg_type == 10:     # Pi+
-                        local_damage_multiplier = 1.0 / 3.0
-                    elif dmg_type == 9:      # Pi
-                        local_damage_multiplier = 0.2
-                    elif dmg_type == 8:      # Pi-
-                        local_damage_multiplier = 0.1
+                    if dmg_type in (7, 11): local_damage_multiplier = 0.5
+                    elif dmg_type == 10: local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 9: local_damage_multiplier = 0.2
+                    elif dmg_type == 8: local_damage_multiplier = 0.1
             else:
-                # If a Homogeneous target is hit in Skull/Eye, it has no brain. Override back to torso metrics.
                 if body_type == 2:
                     if dmg_type in (7, 11): local_damage_multiplier = 0.5
                     elif dmg_type == 10: local_damage_multiplier = 1.0 / 3.0
@@ -795,7 +800,7 @@ class Battle(commands.Cog):
                 else:
                     raw_injury = min(raw_injury, 2.0)
 
-            # 5. GURPS Minimum Injury Axiom: Penetrating damage cannot yield 0 injury
+            # 5. GURPS Minimum Injury Axiom
             if penetrating_damage > 0 and raw_injury > 0 and raw_injury < 1.0:
                 raw_injury = 1.0
 
@@ -835,9 +840,8 @@ class Battle(commands.Cog):
             elif incapacitation:
                 injury_status_msg = f"\n⚠️ **{location_name.upper()} INCAPACITADO!**"
 
-            # Logic to dynamically show the math without absurd equations
             if raw_injury > final_injury:
-                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Máximo de Dano que seu {location_name} pode receber)*"
+                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Atngiu o teto do {location_name})*"
             else:
                 calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {final_injury} PV`"
 
@@ -867,8 +871,19 @@ class Battle(commands.Cog):
                 inline=False,
             )
 
-        # Mandatory followup via webhook
-        await interaction.followup.send(embed=defense_embed)
+        # High-efficiency primary key image asset resolution bypassing player mapping overhead
+        character_file, thumbnail_url = get_character_thumbnail_by_id(
+            self.db_connection, character_data["character_id"]
+        )
+
+        if thumbnail_url:
+            defense_embed.set_thumbnail(url=thumbnail_url)
+
+        # Strict conditional dispatch protecting network payload against NoneType serialization
+        if character_file is not None:
+            await interaction.followup.send(embed=defense_embed, file=character_file)
+        else:
+            await interaction.followup.send(embed=defense_embed)
 
     # Fnt ---------------------------------------------------------
     @app_commands.command(description="Realiza uma finta")
@@ -876,16 +891,24 @@ class Battle(commands.Cog):
         nh1="Seu nível de habilidade", nh2="Nível de habilidade do seu oponente"
     )
     async def fnt(self, interaction: discord.Interaction, nh1: int, nh2: int):
+        """
+        Resolves a GURPS Feint utilizing a quick dispute mechanism.
+        Secures the network token immediately via deferral due to multiple database operations.
+        """
+        # CRITICAL AXIOM: Immediate network token preservation to shield against 3-second timeouts
+        await interaction.response.defer(ephemeral=False)
+
         player_id = interaction.user.id
 
+        # Database state collection
         shock = get_player_condition(self.db_connection, player_id, "shock")
-
         effective_nh1 = nh1 - shock
 
-        # cleaning up the tables
+        # Cleaning up the transient state tables
         clear_player_conditions(self.db_connection, player_id)
         clear_current_attack(self.db_connection)
 
+        # Executing the core relational dispute logic
         result = quick_dispute(player_id, effective_nh1, nh2)
 
         dice_pool1 = result["result1"]["dice_pool1"]
@@ -900,16 +923,17 @@ class Battle(commands.Cog):
 
         fnt_embed = discord.Embed()
 
+        # ==========================================
+        # DISPUTE RESOLUTION STATE MACHINE
+        # ==========================================
         if success_roll1 is True and success_roll2 is False:
             fnt_embed.title = "A FINTA FOI UM SUCESSO"
             fnt_embed.description = (
                 "Você obteve um sucesso no teste e seu oponente um fracasso!\n\n"
-                "Sua margem de sucesso será usada como penalidade para a próxima defesa inimiga"
+                "Sua margem de sucesso será usada como penalidade para a próxima defesa inimiga."
             )
             fnt_embed.color = discord.Color.green()
-            set_player_condition(
-                self.db_connection, player_id, "feint", margin1
-            )  # Add the value in the SQL
+            set_player_condition(self.db_connection, player_id, "feint", margin1)
 
             fnt_embed.add_field(
                 name="Você",
@@ -927,7 +951,7 @@ class Battle(commands.Cog):
 
         elif success_roll1 is False:
             fnt_embed.title = "A FINTA FOI UM FRACASSO"
-            fnt_embed.description = "Vcê fracassou no teste de fina"
+            fnt_embed.description = "Você fracassou no teste de finta."
             fnt_embed.color = discord.Color.red()
 
             fnt_embed.add_field(
@@ -940,9 +964,7 @@ class Battle(commands.Cog):
             fnt_embed.title = "A FINTA FOI UM SUCESSO!"
             fnt_embed.color = discord.Color.green()
             fnt_embed.description = "Resultado decidido pela margem do teste."
-            set_player_condition(
-                self.db_connection, player_id, "feint", margin1 - margin2
-            )  # Add the value in the SQL
+            set_player_condition(self.db_connection, player_id, "feint", margin1 - margin2)
 
             fnt_embed.add_field(
                 name="Você",
@@ -962,8 +984,8 @@ class Battle(commands.Cog):
 
         elif margin1 == margin2:
             fnt_embed.title = "EMPATE!"
-            fnt_embed.color = discord.Color.greyple()
-            fnt_embed.description = "Empate"
+            fnt_embed.color = discord.Color.dark_gray()
+            fnt_embed.description = "A finta não surtiu efeito devido ao equilíbrio de margens."
 
             fnt_embed.add_field(
                 name="Você",
@@ -973,19 +995,14 @@ class Battle(commands.Cog):
             fnt_embed.add_field(
                 name="Oponente",
                 value=f"NH: {nh2}\n`Dados: {dices2} = {dice_pool2}`\nSucesso: Sim\n`Margem: {margin2}`",
-                inline=False,
-            )
-            fnt_embed.add_field(
-                name="Margem de Vitória",
-                value=f"`{margin1} - {margin2} = {margin1 - margin2}`",
                 inline=False,
             )
 
         else:
             fnt_embed.title = "A FINTA FOI UM FRACASSO"
             fnt_embed.color = discord.Color.red()
+            fnt_embed.description = "O oponente previu seus movimentos e superou sua margem."
 
-            fnt_embed.description = "Resultado decidido pela margem do teste."
             fnt_embed.add_field(
                 name="Você",
                 value=f"NH: {effective_nh1}\n`Dados: {dices1} = {dice_pool1}`\nSucesso: Sim\n`Margem: {margin1}`",
@@ -996,13 +1013,18 @@ class Battle(commands.Cog):
                 value=f"NH: {nh2}\n`Dados: {dices2} = {dice_pool2}`\nSucesso: Sim\n`Margem: {margin2}`",
                 inline=False,
             )
-            fnt_embed.add_field(
-                name="Margem de Vitória",
-                value=f"`{margin1} - {margin2} = {margin1 - margin2}`",
-                inline=False,
-            )
 
-        await interaction.response.send_message(embed=fnt_embed)
+        # Character visual asset lookup using the payload wrapper
+        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+
+        if thumbnail_url:
+            fnt_embed.set_thumbnail(url=thumbnail_url)
+
+        # Strict conditional dispatch protecting network payload against NoneType serialization
+        if character_file is not None:
+            await interaction.followup.send(embed=fnt_embed, file=character_file)
+        else:
+            await interaction.followup.send(embed=fnt_embed)
 
     # Apt (aim command) -------------------------------------------
     @app_commands.command(
