@@ -197,7 +197,7 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
             additional_max_pv, additional_vont, additional_per, 
             additional_max_pf, additional_basic_speed, additional_basic_move, 
             energy_reserve, normal_diffuse_homogeneous_unded, money,
-            current_pv, current_pf, current_er
+            current_pv, current_pf, current_er, current_points
         FROM characters 
         WHERE owner_id = ?
         """,
@@ -232,6 +232,7 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
         "current_pv": row[17],
         "current_pf": row[18],
         "current_er": row[19],
+        "current_points": row[20],
     }
 
 

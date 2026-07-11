@@ -34,7 +34,8 @@ CREATE TABLE "characters" (
     "money" INTEGER DEFAULT 0,
     "current_pv" INTEGER DEFAULT 0,
     "current_pf" INTEGER DEFAULT 0,
-    "current_er" INTEGER DEFAULT 0
+    "current_er" INTEGER DEFAULT 0,
+    "current_points" INTEGER DEFAULT 0
 );
 
 CREATE TABLE "hdm" (
