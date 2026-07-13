@@ -17,7 +17,6 @@ class Sheet(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.bot = bot
         project_root = Path(__file__).resolve().parent.parent
         database_path = project_root / "data" / "database.db"
 
@@ -104,7 +103,7 @@ class Sheet(commands.Cog):
         # Money
         money = character["money"]
 
-        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\nDinheiro: `{money}`")
+        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\n**Dinheiro:** `{money}`")
 
         sheet_embed.add_field(
             name="Atributos Básicos",
@@ -212,7 +211,7 @@ class Sheet(commands.Cog):
         # Embed Construction Pipeline
         sheet_view_embed = discord.Embed(
             title=f"**{name}**", 
-            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\nDinheiro: `{money}`",
+            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\n**Dinheiro:** `{money}`",
             color=discord.Color.gold()
         )
 
