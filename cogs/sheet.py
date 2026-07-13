@@ -101,7 +101,10 @@ class Sheet(commands.Cog):
         current_points = character["current_points"]
         total_points = character["total_points"]
 
-        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`")
+        # Money
+        money = character["money"]
+
+        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\nDinheiro: `{money}`")
 
         sheet_embed.add_field(
             name="Atributos Básicos",
@@ -203,10 +206,13 @@ class Sheet(commands.Cog):
         current_points = character_data["current_points"]
         total_points = character_data["total_points"]
 
+        # Money
+        money = character_data["money"]
+
         # Embed Construction Pipeline
         sheet_view_embed = discord.Embed(
             title=f"**{name}**", 
-            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`",
+            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\nDinheiro: `{money}`",
             color=discord.Color.gold()
         )
 
