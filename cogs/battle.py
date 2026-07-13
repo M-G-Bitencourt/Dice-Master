@@ -149,7 +149,6 @@ class Battle(commands.Cog):
         self.db_connection = sqlite3.connect(database_path)
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
-
     # Damage Command ------------------------------------------------
     @app_commands.command(description="Calcula dano de um ataque")
     @app_commands.describe(
@@ -392,11 +391,13 @@ class Battle(commands.Cog):
             )
 
         # Character visual asset lookup using the wrapper function
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             atk_melee_embed.set_thumbnail(url=thumbnail_url)
-    
+
         # Secure final dispatch mapped to the non-ephemeral followup payload
         if character_file is not None:
             await interaction.followup.send(embed=atk_melee_embed, file=character_file)
@@ -470,10 +471,10 @@ class Battle(commands.Cog):
         # Database state collection with strict transactional isolation
         aim_value = get_player_condition(self.db_connection, player_id, "aim")
         aim_modifier = min(aim_value, 3) if aim_value is not None else 0
-        
+
         shock_raw = get_player_condition(self.db_connection, player_id, "shock")
         shock = shock_raw if shock_raw is not None else 0
-        
+
         st = get_character_strength(self.db_connection, player_id)
 
         # Tactical math correction: Shock is a penalty, it must be subtracted
@@ -580,11 +581,13 @@ class Battle(commands.Cog):
             )
 
         # Character visual asset lookup using the wrapper payload function
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             ranged_embed.set_thumbnail(url=thumbnail_url)
-    
+
         # Secure final dispatch mapped to the non-ephemeral followup payload
         if character_file is not None:
             await interaction.followup.send(embed=ranged_embed, file=character_file)
@@ -592,7 +595,10 @@ class Battle(commands.Cog):
             await interaction.followup.send(embed=ranged_embed)
 
     # Def --------------------------------------------------------------
-    @app_commands.command(name="def", description="Realiza uma defesa ativa incorporando morfologia avançada")
+    @app_commands.command(
+        name="def",
+        description="Realiza uma defesa ativa incorporando morfologia avançada",
+    )
     @app_commands.describe(
         nh="Seu nível de habilidade na defesa",
         rd="Redução de dano no local atacado",
@@ -636,26 +642,41 @@ class Battle(commands.Cog):
         st = character_data["st"]
         additional_max_pv = character_data["additional_max_pv"]
         current_hp = character_data["current_pv"]
-        
+
         # Morphological Topology Extraction (0=Normal, 1=Diffuse, 2=Homogeneous, 3=Unliving)
         body_type = character_data["normal_diffuse_homogeneous_unded"]
 
         # Structural taxonomies mappings
         hit_locations_map = {
-            0: "Tronco", 1: "Órgãos Vitais", 2: "Crânio", 3: "Olho", 
-            4: "Rosto", 5: "Pescoço", 6: "Virilha", 7: "Braço", 
-            8: "Perna", 9: "Mão", 10: "Pé"
-        }
-        
-        topology_map = {
-            0: "Normal", 1: "Difuso", 2: "Homogêneo", 3: "Não-Vivo"
+            0: "Tronco",
+            1: "Órgãos Vitais",
+            2: "Crânio",
+            3: "Olho",
+            4: "Rosto",
+            5: "Pescoço",
+            6: "Virilha",
+            7: "Braço",
+            8: "Perna",
+            9: "Mão",
+            10: "Pé",
         }
 
+        topology_map = {0: "Normal", 1: "Difuso", 2: "Homogêneo", 3: "Não-Vivo"}
+
         damage_types_map = {
-            1: "Atribulação", 2: "Queimadura", 3: "Corrosão", 4: "Contusão",
-            5: "Corte", 6: "Fadiga", 7: "Perfuração", 8: "Pouco Perfurante (Pi-)",
-            9: "Perfurante (Pi)", 10: "Muito Perfurante (Pi+)",
-            11: "Extremamente Perfurante (Pi++)", 12: "Especial", 13: "Toxina"
+            1: "Atribulação",
+            2: "Queimadura",
+            3: "Corrosão",
+            4: "Contusão",
+            5: "Corte",
+            6: "Fadiga",
+            7: "Perfuração",
+            8: "Pouco Perfurante (Pi-)",
+            9: "Perfurante (Pi)",
+            10: "Muito Perfurante (Pi+)",
+            11: "Extremamente Perfurante (Pi++)",
+            12: "Especial",
+            13: "Toxina",
         }
 
         defense_embed = discord.Embed()
@@ -673,7 +694,9 @@ class Battle(commands.Cog):
         # ==========================================
         if is_waived:
             defense_embed.title = "DEFESA ABANDONADA"
-            defense_embed.description = "Você optou por não esboçar qualquer reação defensiva."
+            defense_embed.description = (
+                "Você optou por não esboçar qualquer reação defensiva."
+            )
             defense_embed.color = discord.Color.dark_red()
         elif is_opponent_critical:
             defense_embed.title = "ATAQUE CRÍTICO RECEBIDO"
@@ -712,7 +735,9 @@ class Battle(commands.Cog):
                     is_defense_successful = True
                     defense_embed.title = "SUCESSO!"
                     defense_embed.color = discord.Color.green()
-                    defense_embed.description = "Você conseguiu evitar o ataque inimigo."
+                    defense_embed.description = (
+                        "Você conseguiu evitar o ataque inimigo."
+                    )
             else:
                 if dice_pool - effective_nh >= 10:
                     is_critical_failure = True
@@ -736,11 +761,18 @@ class Battle(commands.Cog):
         # DAMAGE & INJURY CALCULATION PIPELINE
         # ==========================================
         suffers_damage = (
-            is_waived or is_opponent_critical or is_critical_failure or not is_defense_successful
+            is_waived
+            or is_opponent_critical
+            or is_critical_failure
+            or not is_defense_successful
         )
 
         if suffers_damage:
-            chosen_damage = critical_raw_damage if (is_critical_failure or is_opponent_critical) else raw_damage
+            chosen_damage = (
+                critical_raw_damage
+                if (is_critical_failure or is_opponent_critical)
+                else raw_damage
+            )
 
             # GURPS Rule: Skull hit location natively provides an extra +2 DR protection
             effective_rd = rd + 2 if hit_location == 2 else rd
@@ -748,8 +780,19 @@ class Battle(commands.Cog):
 
             # 1. Base Multipliers Assignment (Normal Fleshy Humanoid Baseline)
             base_multipliers = {
-                1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.5, 6: 1.0, 7: 2.0,
-                8: 0.5, 9: 1.0, 10: 1.5, 11: 2.0, 12: 1.0, 13: 1.0
+                1: 1.0,
+                2: 1.0,
+                3: 1.0,
+                4: 1.0,
+                5: 1.5,
+                6: 1.0,
+                7: 2.0,
+                8: 0.5,
+                9: 1.0,
+                10: 1.5,
+                11: 2.0,
+                12: 1.0,
+                13: 1.0,
             }
             local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
 
@@ -774,22 +817,35 @@ class Battle(commands.Cog):
             # 3. Morphological Overrides (Unliving & Homogeneous strict rule updates)
             if hit_location not in (2, 3):
                 if body_type == 3:  # Unliving (Não-Vivo)
-                    if dmg_type in (7, 11): local_damage_multiplier = 1.0
-                    elif dmg_type == 10: local_damage_multiplier = 0.5
-                    elif dmg_type == 9: local_damage_multiplier = 1.0 / 3.0
-                    elif dmg_type == 8: local_damage_multiplier = 0.2
+                    if dmg_type in (7, 11):
+                        local_damage_multiplier = 1.0
+                    elif dmg_type == 10:
+                        local_damage_multiplier = 0.5
+                    elif dmg_type == 9:
+                        local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 8:
+                        local_damage_multiplier = 0.2
                 elif body_type == 2:  # Homogeneous
-                    if dmg_type in (7, 11): local_damage_multiplier = 0.5
-                    elif dmg_type == 10: local_damage_multiplier = 1.0 / 3.0
-                    elif dmg_type == 9: local_damage_multiplier = 0.2
-                    elif dmg_type == 8: local_damage_multiplier = 0.1
+                    if dmg_type in (7, 11):
+                        local_damage_multiplier = 0.5
+                    elif dmg_type == 10:
+                        local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 9:
+                        local_damage_multiplier = 0.2
+                    elif dmg_type == 8:
+                        local_damage_multiplier = 0.1
             else:
                 if body_type == 2:
-                    if dmg_type in (7, 11): local_damage_multiplier = 0.5
-                    elif dmg_type == 10: local_damage_multiplier = 1.0 / 3.0
-                    elif dmg_type == 9: local_damage_multiplier = 0.2
-                    elif dmg_type == 8: local_damage_multiplier = 0.1
-                    else: local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
+                    if dmg_type in (7, 11):
+                        local_damage_multiplier = 0.5
+                    elif dmg_type == 10:
+                        local_damage_multiplier = 1.0 / 3.0
+                    elif dmg_type == 9:
+                        local_damage_multiplier = 0.2
+                    elif dmg_type == 8:
+                        local_damage_multiplier = 0.1
+                    else:
+                        local_damage_multiplier = base_multipliers.get(dmg_type, 1.0)
 
             raw_injury = penetrating_damage * local_damage_multiplier
 
@@ -813,7 +869,7 @@ class Battle(commands.Cog):
             amputation = False
             incapacitation = False
 
-            if hit_location in (7, 8):    # Limb (Arm/Leg)
+            if hit_location in (7, 8):  # Limb (Arm/Leg)
                 appendage_hp = (st + additional_max_pv) / 2
             elif hit_location in (9, 10):  # Extremity (Hand/Foot)
                 appendage_hp = (st + additional_max_pv) / 3
@@ -834,7 +890,7 @@ class Battle(commands.Cog):
             topology_name = topology_map.get(body_type, "Desconhecido")
             damage_name = damage_types_map.get(dmg_type, "Especial/Desconhecido")
             injury_status_msg = ""
-            
+
             if amputation:
                 injury_status_msg = f"\n⚠️ **{location_name.upper()} AMPUTADO!**"
             elif incapacitation:
@@ -857,7 +913,7 @@ class Battle(commands.Cog):
                     f"**Lesão Final Aplicada:** {calculation_string}"
                     f"\n{injury_status_msg}"
                 ),
-                inline=False
+                inline=False,
             )
             defense_embed.add_field(
                 name="Métricas Vitais do Personagem",
@@ -964,7 +1020,9 @@ class Battle(commands.Cog):
             fnt_embed.title = "A FINTA FOI UM SUCESSO!"
             fnt_embed.color = discord.Color.green()
             fnt_embed.description = "Resultado decidido pela margem do teste."
-            set_player_condition(self.db_connection, player_id, "feint", margin1 - margin2)
+            set_player_condition(
+                self.db_connection, player_id, "feint", margin1 - margin2
+            )
 
             fnt_embed.add_field(
                 name="Você",
@@ -985,7 +1043,9 @@ class Battle(commands.Cog):
         elif margin1 == margin2:
             fnt_embed.title = "EMPATE!"
             fnt_embed.color = discord.Color.dark_gray()
-            fnt_embed.description = "A finta não surtiu efeito devido ao equilíbrio de margens."
+            fnt_embed.description = (
+                "A finta não surtiu efeito devido ao equilíbrio de margens."
+            )
 
             fnt_embed.add_field(
                 name="Você",
@@ -1001,7 +1061,9 @@ class Battle(commands.Cog):
         else:
             fnt_embed.title = "A FINTA FOI UM FRACASSO"
             fnt_embed.color = discord.Color.red()
-            fnt_embed.description = "O oponente previu seus movimentos e superou sua margem."
+            fnt_embed.description = (
+                "O oponente previu seus movimentos e superou sua margem."
+            )
 
             fnt_embed.add_field(
                 name="Você",
@@ -1015,7 +1077,9 @@ class Battle(commands.Cog):
             )
 
         # Character visual asset lookup using the payload wrapper
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             fnt_embed.set_thumbnail(url=thumbnail_url)

@@ -1,5 +1,6 @@
 from random import randint
 
+
 def hdm_dices(nh: int, fate: int):
     # --- SAFETY CHECKS (Prevents infinite loops) ---
 
@@ -63,40 +64,39 @@ from pathlib import Path
 BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 DATABASE_FILE_PATH = BASE_DIRECTORY / "data" / "database.db"
 
+
 def consume_deterministic_fate(player_identifier: int) -> Optional[int]:
     """
     Queries the SQLite database for a deterministic fate assigned to a specific player.
-    If a fate exists, it retrieves the value, purges the record to prevent 
-    infinite repetition, and returns the integer. 
+    If a fate exists, it retrieves the value, purges the record to prevent
+    infinite repetition, and returns the integer.
     Returns None otherwise.
     """
     try:
         with sqlite3.connect(DATABASE_FILE_PATH) as db_connection:
             db_cursor = db_connection.cursor()
-            
+
             # Step 1: Query the existing deterministic state
             db_cursor.execute(
-                "SELECT fate FROM hdm WHERE id_player = ?", 
-                (player_identifier,)
+                "SELECT fate FROM hdm WHERE id_player = ?", (player_identifier,)
             )
             query_result = db_cursor.fetchone()
-            
+
             if query_result is None:
                 return None
-                
+
             fate_value = query_result[0]
-            
+
             # Step 2: Purge the record to consume the state strictly
             db_cursor.execute(
-                "DELETE FROM hdm WHERE id_player = ?", 
-                (player_identifier,)
+                "DELETE FROM hdm WHERE id_player = ?", (player_identifier,)
             )
-            
+
             # Commit the transaction atomically
             db_connection.commit()
-            
+
             return fate_value
-            
+
     except sqlite3.Error:
         # Failsafe: return None to allow standard RNG roll in case of structural failure.
         # Warning: Exceptions are explicitly silenced here per the omission of logging.

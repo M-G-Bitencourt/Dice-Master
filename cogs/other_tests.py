@@ -10,6 +10,7 @@ from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
 from utils.db_functions import get_character_thumbnail_payload
 
+
 class Other_tests(commands.Cog):
     """ """
 
@@ -51,9 +52,11 @@ class Other_tests(commands.Cog):
     # Reaction Test ---------------------------------------------------
     @app_commands.command(
         name="react",
-        description="Executa a rolagem de um teste de reação baseado nas tabelas canônicas do GURPS."
+        description="Executa a rolagem de um teste de reação baseado nas tabelas canônicas do GURPS.",
     )
-    @app_commands.describe(modifier="Soma dos modificadores de reação ativos na entidade")
+    @app_commands.describe(
+        modifier="Soma dos modificadores de reação ativos na entidade"
+    )
     async def react(self, interaction: discord.Interaction, modifier: int):
         """
         Resolves a GURPS Reaction Test, handling deterministic fate constraints.
@@ -152,7 +155,9 @@ class Other_tests(commands.Cog):
         )
 
         # Character visual asset extraction using the payload wrapper
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             react_embed.set_thumbnail(url=thumbnail_url)
@@ -162,8 +167,7 @@ class Other_tests(commands.Cog):
             await interaction.followup.send(embed=react_embed, file=character_file)
         else:
             await interaction.followup.send(embed=react_embed)
-    
-    
+
     # Panic -----------------------------------------------------------
     @app_commands.command(description="Realiza uma verificação de Pânico")
     @app_commands.describe(
@@ -227,15 +231,15 @@ class Other_tests(commands.Cog):
         # ==========================================
         if is_success:
             panic_embed.title = "RESISTIU AO PÂNICO"
-            panic_embed.color = discord.Color.gold() if is_critical_success else discord.Color.green()
-            
+            panic_embed.color = (
+                discord.Color.gold() if is_critical_success else discord.Color.green()
+            )
+
             modificador_sign = "+" if modificador >= 0 else "-"
             margin_of_victory = effective_sl - dice_pool
 
             panic_embed.add_field(
-                name="Parada de Dados", 
-                value=f"`{dices} = {dice_pool}`", 
-                inline=False
+                name="Parada de Dados", value=f"`{dices} = {dice_pool}`", inline=False
             )
             panic_embed.add_field(
                 name="Nível de Vontade",
@@ -249,29 +253,33 @@ class Other_tests(commands.Cog):
             )
         else:
             panic_embed.title = "SUCUMBIU AO PÂNICO"
-            panic_embed.color = discord.Color.brand_red() if is_critical_failure else discord.Color.red()
-            
+            panic_embed.color = (
+                discord.Color.brand_red()
+                if is_critical_failure
+                else discord.Color.red()
+            )
+
             # Executing secondary panic metrics calculation (3d6 + failure margin)
             panic_dices = [randint(1, 6) for _ in range(3)]
             panic_dice_pool = sum(panic_dices)
             failure_margin = dice_pool - effective_sl
-            
+
             # GURPS Axiom: Critical failures automatically add a flat +10 penalty to the panic roll
             if is_critical_failure:
                 panic_value = panic_dice_pool + failure_margin + 10
-                critical_notice = "\n⚠️ **FALHA CRÍTICA: +10 adicionado ao resultado final!**"
+                critical_notice = (
+                    "\n⚠️ **FALHA CRÍTICA: +10 adicionado ao resultado final!**"
+                )
             else:
                 panic_value = panic_dice_pool + failure_margin
                 critical_notice = ""
 
-            panic_embed.description = (
-                f"A tabela de consequências de pânico encontra-se no Módulo Básico, pág. 361.{critical_notice}"
-            )
-            
+            panic_embed.description = f"A tabela de consequências de pânico encontra-se no Módulo Básico, pág. 361.{critical_notice}"
+
             panic_embed.add_field(
                 name="Métricas de Fracasso",
                 value=f"Dados do Teste: `{dices} = {dice_pool}`\nMargem de Fracasso: `{failure_margin}`",
-                inline=False
+                inline=False,
             )
             panic_embed.add_field(
                 name="Rolagem na Tabela de Pânicos",
@@ -280,7 +288,9 @@ class Other_tests(commands.Cog):
             )
 
         # Character visual asset lookup using the payload wrapper
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             panic_embed.set_thumbnail(url=thumbnail_url)

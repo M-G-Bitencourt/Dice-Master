@@ -10,10 +10,9 @@ from utils.db_functions import get_character_thumbnail_payload
 from utils.db_functions import get_character_thumbnail_by_id
 from utils.db_functions import get_character_profile_by_id
 
-class Sheet(commands.Cog):
-    """
 
-    """
+class Sheet(commands.Cog):
+    """ """
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -23,8 +22,6 @@ class Sheet(commands.Cog):
         # Establishing the persistent, active connection channel
         self.db_connection = sqlite3.connect(database_path)
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
-
-    
 
     async def character_autocomplete(
         self,
@@ -36,10 +33,10 @@ class Sheet(commands.Cog):
         Limits the return pool to 25 instances, respecting Discord API constraints.
         """
         cursor = self.db_connection.cursor()
-        
+
         # SQL Injection defensive parameterization with wildcard
         search_pattern = f"%{current}%"
-        
+
         cursor.execute(
             """
             SELECT character_id, name 
@@ -47,44 +44,45 @@ class Sheet(commands.Cog):
             WHERE name LIKE ? 
             LIMIT 25
             """,
-            (search_pattern,)
+            (search_pattern,),
         )
-        
+
         fetched_characters = cursor.fetchall()
-        
+
         return [
             app_commands.Choice(name=row[1], value=str(row[0]))
             for row in fetched_characters
         ]
 
-    
     # sheet ---------------------------------------------------
     @app_commands.command(
         name="sheet",
-        description="Envia sua ficha de personagem no chat como uma mensagem efêmera"
+        description="Envia sua ficha de personagem no chat como uma mensagem efêmera",
     )
     async def sheet(self, interaction: discord.Interaction):
         # Immediate deferral to respect Discord's temporal strictures.
         await interaction.response.defer(ephemeral=True)
-        
+
         player_id = interaction.user.id
-        
+
         try:
             character = get_character_profile(self.db_connection, player_id)
         except ValueError as e:
             # Capturing database anomalies if the user lacks an active character matrix
-            await interaction.followup.send(f"Erro de processamento: {e}", ephemeral=True)
+            await interaction.followup.send(
+                f"Erro de processamento: {e}", ephemeral=True
+            )
             return
 
         name = character["name"]
-        
+
         # Basic Attributes
         st = character["st"]
         dx = character["dx"]
         iq = character["iq"]
         ht = character["ht"]
         base_er = character["energy_reserve"]
-        
+
         # Secondary Characteristics
         max_pv = int(st) + int(character["additional_max_pv"])
         max_pf = int(ht) + int(character["additional_max_pf"])
@@ -103,7 +101,11 @@ class Sheet(commands.Cog):
         # Money
         money = character["money"]
 
-        sheet_embed = discord.Embed(title=f"**{name}**", color=discord.Color.gold(), description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\n**Dinheiro:** `{money}`")
+        sheet_embed = discord.Embed(
+            title=f"**{name}**",
+            color=discord.Color.gold(),
+            description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\n**Dinheiro:** `{money}`",
+        )
 
         sheet_embed.add_field(
             name="Atributos Básicos",
@@ -114,7 +116,7 @@ class Sheet(commands.Cog):
                 f"**HT:** `{ht}`\n"
                 f"**ER:** `{base_er}`"
             ),
-            inline=False
+            inline=False,
         )
 
         sheet_embed.add_field(
@@ -125,7 +127,7 @@ class Sheet(commands.Cog):
                 f"Vontade: `{vont}`\n"
                 f"Percepção: `{per}`\n"
             ),
-            inline=False
+            inline=False,
         )
 
         # Inline formatting, completely eradicating the superfluous intermediate variable
@@ -136,30 +138,31 @@ class Sheet(commands.Cog):
                 f"**PF:** `{current_pf}`\n"
                 f"**ER:** `{current_er}`"
             ),
-            inline=False
+            inline=False,
         )
         # images
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             sheet_embed.set_thumbnail(url=thumbnail_url)
 
         # Mandatory followup via webhook, transmitting the final embed
-        await interaction.followup.send(embed=sheet_embed, file=character_file, ephemeral=True)
-
+        await interaction.followup.send(
+            embed=sheet_embed, file=character_file, ephemeral=True
+        )
 
     @app_commands.command(
         name="sheet_view",
-        description="Permite ao mestre inspecionar a matriz completa de qualquer personagem no sistema."
+        description="Permite ao mestre inspecionar a matriz completa de qualquer personagem no sistema.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.describe(character="A entidade que será submetida à inspeção estrutural")
+    @app_commands.describe(
+        character="A entidade que será submetida à inspeção estrutural"
+    )
     @app_commands.default_permissions(administrator=True)
-    async def sheet_view(
-        self, 
-        interaction: discord.Interaction, 
-        character: str
-    ):
+    async def sheet_view(self, interaction: discord.Interaction, character: str):
         # Immediate deferral to respect Discord's temporal strictures.
         # Set to False to permit the Master to render the diagnostic metrics to the channel.
         await interaction.response.defer(ephemeral=True)
@@ -175,12 +178,13 @@ class Sheet(commands.Cog):
 
         # Invoking the newly minted high-efficiency primary key extraction function
         try:
-            character_data = get_character_profile_by_id(self.db_connection, target_character_id)
+            character_data = get_character_profile_by_id(
+                self.db_connection, target_character_id
+            )
         except ValueError as e:
             await interaction.followup.send(f"Erro de processamento: {e}")
             return
 
-        
         name = character_data["name"]
 
         # Basic Attributes
@@ -189,7 +193,6 @@ class Sheet(commands.Cog):
         iq = character_data["iq"]
         ht = character_data["ht"]
         base_er = character_data["energy_reserve"]
-
 
         # Secondary Characteristics calculation (Algebraic evaluation)
         max_pv = st + character_data["additional_max_pv"]
@@ -210,9 +213,9 @@ class Sheet(commands.Cog):
 
         # Embed Construction Pipeline
         sheet_view_embed = discord.Embed(
-            title=f"**{name}**", 
+            title=f"**{name}**",
             description=f"**Total de Pontos:** `{total_points}`\n**Pontos não Gastos:** `{current_points}`\n**Dinheiro:** `{money}`",
-            color=discord.Color.gold()
+            color=discord.Color.gold(),
         )
 
         sheet_view_embed.add_field(
@@ -224,7 +227,7 @@ class Sheet(commands.Cog):
                 f"**HT:** `{ht}`\n"
                 f"**ER:** `{base_er}`"
             ),
-            inline=False
+            inline=False,
         )
 
         sheet_view_embed.add_field(
@@ -235,7 +238,7 @@ class Sheet(commands.Cog):
                 f"Vontade: `{vont}`\n"
                 f"Percepção: `{per}`\n"
             ),
-            inline=False
+            inline=False,
         )
 
         # Presentation of Current Resources mapped against their absolute maximums
@@ -246,11 +249,13 @@ class Sheet(commands.Cog):
                 f"**PF:** `{current_pf}`\n"
                 f"**ER:** `{current_er}`"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         # Binary asset pipeline extraction using the primary key
-        character_file, thumbnail_url = get_character_thumbnail_by_id(self.db_connection, target_character_id)
+        character_file, thumbnail_url = get_character_thumbnail_by_id(
+            self.db_connection, target_character_id
+        )
 
         if thumbnail_url:
             sheet_view_embed.set_thumbnail(url=thumbnail_url)
@@ -258,9 +263,12 @@ class Sheet(commands.Cog):
         # Strict conditional dispatch protecting network payload against NoneType serialization
         # Slipped to match the ephemeral=False definition established in the deferral phase
         if character_file is not None:
-            await interaction.followup.send(embed=sheet_view_embed, file=character_file, ephemeral=True)
+            await interaction.followup.send(
+                embed=sheet_view_embed, file=character_file, ephemeral=True
+            )
         else:
-            await interaction.followup.send(embed=sheet_view_embed,ephemeral=True)
+            await interaction.followup.send(embed=sheet_view_embed, ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     """

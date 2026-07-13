@@ -233,13 +233,15 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
         "current_pf": row[18],
         "current_er": row[19],
         "current_points": row[20],
-        "total_points": row[21]
+        "total_points": row[21],
     }
 
 
-def get_character_profile_by_id(connection: sqlite3.Connection, character_id: int) -> dict:
+def get_character_profile_by_id(
+    connection: sqlite3.Connection, character_id: int
+) -> dict:
     """
-    Retrieves the comprehensive attribute matrix for a specific character based 
+    Retrieves the comprehensive attribute matrix for a specific character based
     exclusively on the denormalized 22-column schema using the primary character_id.
     """
     cursor = connection.cursor()
@@ -295,27 +297,33 @@ def set_character_resource(
     connection: sqlite3.Connection, player_id: int, resource_name: str, new_value: int
 ) -> None:
     """
-    Mutates the absolute value of a specific volatile resource directly 
+    Mutates the absolute value of a specific volatile resource directly
     within the foundational character matrix.
     """
     character_id = _resolve_character_id(connection, player_id)
-    
+
     # Strict lexical mapping to prevent SQL Injection and ensure schema compliance.
     # This guarantees that regardless of what the Discord interface sends (hp, pv, current_pv),
     # the exact foundational column is targeted.
     column_mapping = {
-        "hp": "current_pv", "pv": "current_pv", "current_pv": "current_pv",
-        "fp": "current_pf", "pf": "current_pf", "current_pf": "current_pf",
-        "er": "current_er", "re": "current_er", "current_er": "current_er"
+        "hp": "current_pv",
+        "pv": "current_pv",
+        "current_pv": "current_pv",
+        "fp": "current_pf",
+        "pf": "current_pf",
+        "current_pf": "current_pf",
+        "er": "current_er",
+        "re": "current_er",
+        "current_er": "current_er",
     }
-    
+
     sanitized_resource = resource_name.lower()
-    
+
     if sanitized_resource not in column_mapping:
         raise ValueError(
             f"Lexical Anomaly: The resource '{resource_name}' does not map to any known volatile column."
         )
-        
+
     target_column = column_mapping[sanitized_resource]
     cursor = connection.cursor()
 
@@ -330,7 +338,7 @@ def set_character_resource(
         (new_value, character_id),
     )
 
-    # Structural fallback: Since the denormalized paradigm dictates resources are inherent 
+    # Structural fallback: Since the denormalized paradigm dictates resources are inherent
     # to the character row, a failure to mutate implies the character entity has been purged.
     if cursor.rowcount == 0:
         raise ValueError(
@@ -339,14 +347,17 @@ def set_character_resource(
 
     connection.commit()
 
-def get_character_thumbnail_by_id(connection: sqlite3.Connection, character_id: int) -> tuple[discord.File | None, str | None]:
+
+def get_character_thumbnail_by_id(
+    connection: sqlite3.Connection, character_id: int
+) -> tuple[discord.File | None, str | None]:
     """
     Core asset pipeline. Resolves character image path using the primary key
     and builds the binary stream and attachment URL for the Discord API.
     """
     project_root = Path(__file__).resolve().parent.parent
     image_directory = project_root / "data" / "images" / "characters"
-    
+
     image_path = image_directory / f"{character_id}.png"
     default_fallback_path = image_directory / "default_character.png"
 
@@ -359,14 +370,16 @@ def get_character_thumbnail_by_id(connection: sqlite3.Connection, character_id: 
 
     # Using the verified character_id to map the network attachment name
     sealed_filename = f"char_{character_id}.png"
-    
+
     discord_file = discord.File(image_path, filename=sealed_filename)
     attachment_url = f"attachment://{sealed_filename}"
 
     return discord_file, attachment_url
 
 
-def get_character_thumbnail_payload(connection: sqlite3.Connection, player_id: int) -> tuple[discord.File | None, str | None]:
+def get_character_thumbnail_payload(
+    connection: sqlite3.Connection, player_id: int
+) -> tuple[discord.File | None, str | None]:
     """
     Convenience wrapper for player-facing commands. Resolves the player_id
     to a character_id before invoking the core asset pipeline.

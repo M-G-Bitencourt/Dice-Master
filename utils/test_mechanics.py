@@ -60,13 +60,13 @@ def quick_dispute(player_id: int, effective_nh1: int, effective_nh2: int):
             "dice_pool1": dice_pool1,
             "success_roll1": success_roll1,
             "margin1": margin1,
-            "dices1": dices1
+            "dices1": dices1,
         },
         "result2": {
             "dice_pool2": dice_pool2,
             "success_roll2": success_roll2,
             "margin2": margin2,
-            "dices2": dices2
+            "dices2": dices2,
         },
     }
 

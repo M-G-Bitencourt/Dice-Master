@@ -12,7 +12,6 @@ from utils.test_mechanics import quick_dispute
 from utils.db_functions import get_character_thumbnail_payload
 
 
-
 class Skill_tests(commands.Cog):
     """ """
 
@@ -99,11 +98,9 @@ class Skill_tests(commands.Cog):
 
         # Construction of the presentation embed matrix
         test_embed.add_field(
-            name="Parada de Dados", 
-            value=f"`{dices} = {dice_pool}`", 
-            inline=False
+            name="Parada de Dados", value=f"`{dices} = {dice_pool}`", inline=False
         )
-        
+
         modificador_sign = "+" if modificador >= 0 else "-"
         test_embed.add_field(
             name="Nível de Habilidade",
@@ -128,7 +125,9 @@ class Skill_tests(commands.Cog):
             )
 
         # Character visual asset extraction using the payload wrapper
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             test_embed.set_thumbnail(url=thumbnail_url)
@@ -138,7 +137,6 @@ class Skill_tests(commands.Cog):
             await interaction.followup.send(embed=test_embed, file=character_file)
         else:
             await interaction.followup.send(embed=test_embed)
-
 
     # qkd Command
     @app_commands.command(description="Realiza uma disputá Rápida de habilidades")
@@ -189,12 +187,16 @@ class Skill_tests(commands.Cog):
         # ==========================================
         if success_roll1 is True and success_roll2 is False:
             qkd_embed.title = "SUCESSO POR ROLAGEM!"
-            qkd_embed.description = "Você obteve um sucesso no teste e seu oponente um fracasso."
+            qkd_embed.description = (
+                "Você obteve um sucesso no teste e seu oponente um fracasso."
+            )
             qkd_embed.color = discord.Color.green()
 
         elif success_roll1 is False and success_roll2 is True:
             qkd_embed.title = "FRACASSO POR ROLAGEM!"
-            qkd_embed.description = "Você obteve um fracasso no teste e seu oponente um sucesso."
+            qkd_embed.description = (
+                "Você obteve um fracasso no teste e seu oponente um sucesso."
+            )
             qkd_embed.color = discord.Color.red()
 
         elif margin1 > margin2:
@@ -205,7 +207,9 @@ class Skill_tests(commands.Cog):
         elif margin1 == margin2:
             qkd_embed.title = "EMPATE!"
             qkd_embed.color = discord.Color.dark_gray()
-            qkd_embed.description = "A disputa terminou em um equilíbrio absoluto de margens."
+            qkd_embed.description = (
+                "A disputa terminou em um equilíbrio absoluto de margens."
+            )
 
         else:
             qkd_embed.title = "FRACASSO POR MARGEM DE TESTE!"
@@ -245,10 +249,12 @@ class Skill_tests(commands.Cog):
             name="Diferença das Margens de Sucesso",
             value=f"`{margin1} - ({margin2}) = {margin_difference}`",
             inline=False,
-            )
+        )
 
         # Character visual asset extraction using the payload wrapper
-        character_file, thumbnail_url = get_character_thumbnail_payload(self.db_connection, player_id)
+        character_file, thumbnail_url = get_character_thumbnail_payload(
+            self.db_connection, player_id
+        )
 
         if thumbnail_url:
             qkd_embed.set_thumbnail(url=thumbnail_url)
@@ -258,6 +264,7 @@ class Skill_tests(commands.Cog):
             await interaction.followup.send(embed=qkd_embed, file=character_file)
         else:
             await interaction.followup.send(embed=qkd_embed)
+
 
 async def setup(bot: commands.Bot):
     """

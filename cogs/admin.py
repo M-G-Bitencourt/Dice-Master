@@ -21,7 +21,7 @@ class Admin(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        
+
         project_root = Path(__file__).resolve().parent.parent
         database_path = project_root / "data" / "database.db"
 
@@ -102,7 +102,7 @@ class Admin(commands.Cog):
     # manage_character_resource_pool --------------------------------------------
     @app_commands.command(
         name="manage_character_resource_pool",
-        description="Permite editar o PV o PF e a RE dos jogadores"
+        description="Permite editar o PV o PF e a RE dos jogadores",
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
@@ -115,14 +115,14 @@ class Admin(commands.Cog):
     @app_commands.describe(
         player="O jogador que terá os recursos alterados",
         resource="O recurso que será alterado",
-        value="O valor que será somado ou subtraído"
+        value="O valor que será somado ou subtraído",
     )
     async def manage_character_resource_pool(
         self,
         interact: discord.Interaction,
         player: discord.Member,
         resource: app_commands.Choice[str],
-        value: int
+        value: int,
     ):
         # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
         await interact.response.defer(ephemeral=False)
@@ -138,30 +138,27 @@ class Admin(commands.Cog):
             return
 
         character_name = character_data["name"]
-        
+
         # 3. Lexical Translation: Mapping the Discord choice to the database dictionary keys
-        reading_map = {
-            "hp": "current_pv", 
-            "fp": "current_pf", 
-            "er": "current_er"
-        }
-        
+        reading_map = {"hp": "current_pv", "fp": "current_pf", "er": "current_er"}
+
         dict_key = reading_map[resource_key]
         current_value = character_data[dict_key]
-            
+
         new_value = current_value + value
 
         # 4. Database state mutation: set_character_resource handles the SQL mapping internally
-        set_character_resource(self.db_connection, target_player_id, resource_key, new_value)
+        set_character_resource(
+            self.db_connection, target_player_id, resource_key, new_value
+        )
 
         # 5. UI Presentation Pipeline
         modifier_sign = "+" if value >= 0 else ""
-        
+
         transaction_embed = discord.Embed(
-            title="Alteração do Mestre",
-            color=discord.Color.purple()
+            title="Alteração do Mestre", color=discord.Color.purple()
         )
-        
+
         transaction_embed.add_field(
             name="Balanço da Mutação",
             value=(
@@ -170,7 +167,7 @@ class Admin(commands.Cog):
                 f"Modificador Aplicado: `{modifier_sign}{value}`\n"
                 f"Transição de Estado: `{current_value}` -> `{new_value}`"
             ),
-            inline=False
+            inline=False,
         )
 
         # 6. MANDATORY FOLLOWUP: The initial interaction token was consumed by .defer()
@@ -179,16 +176,14 @@ class Admin(commands.Cog):
     # restore_character_resources
     @app_commands.command(
         name="restore_character_resources",
-        description="Restaura incondicionalmente todos os recursos vitais aos seus tetos estruturais máximos"
+        description="Restaura incondicionalmente todos os recursos vitais aos seus tetos estruturais máximos",
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         player="O jogador cujo personagem receberá a restauração absoluta"
     )
     async def restore_character_resources(
-        self,
-        interact: discord.Interaction,
-        player: discord.Member
+        self, interact: discord.Interaction, player: discord.Member
     ):
         # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
         await interact.response.defer(ephemeral=False)
@@ -223,9 +218,9 @@ class Admin(commands.Cog):
         restoration_embed = discord.Embed(
             title="Restauração Estrutural Absoluta",
             description=f"Os fluxos vitais do personagem pertencente ao indivíduo {player.mention} foram compulsoriamente elevados aos seus limites sistêmicos.",
-            color=discord.Color.brand_green()
+            color=discord.Color.brand_green(),
         )
-        
+
         restoration_embed.add_field(
             name="Balanço da Mutação",
             value=(
@@ -234,7 +229,7 @@ class Admin(commands.Cog):
                 f"**PF (Fatigue Points):** `{old_pf}` -> `{max_pf}`\n"
                 f"**ER (Energy Reserve):** `{old_er}` -> `{max_er}`"
             ),
-            inline=False
+            inline=False,
         )
 
         # 7. MANDATORY FOLLOWUP: The initial interaction token was consumed by .defer()
@@ -251,10 +246,10 @@ class Admin(commands.Cog):
         Limits the return pool to 25 instances, respecting Discord API constraints.
         """
         cursor = self.db_connection.cursor()
-        
+
         # SQL Injection defensive parameterization with wildcard
         search_pattern = f"%{current}%"
-        
+
         cursor.execute(
             """
             SELECT character_id, name 
@@ -262,11 +257,11 @@ class Admin(commands.Cog):
             WHERE name LIKE ? 
             LIMIT 25
             """,
-            (search_pattern,)
+            (search_pattern,),
         )
-        
+
         fetched_characters = cursor.fetchall()
-        
+
         return [
             app_commands.Choice(name=row[1], value=str(row[0]))
             for row in fetched_characters
@@ -274,24 +269,20 @@ class Admin(commands.Cog):
 
     @app_commands.command(
         name="switch_character",
-        description="Transfere o controle do seu usuário para um novo personagem."
+        description="Transfere o controle do seu usuário para um novo personagem.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.describe(character="O nome do personagem que você deseja assumir.")
-    async def switch_character(
-        self,
-        interaction: discord.Interaction,
-        character: str
-    ):
+    async def switch_character(self, interaction: discord.Interaction, character: str):
         target_player_id = interaction.user.id
-        
+
         # Casting the string ID back to an integer for relational integrity
         try:
             new_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem é inválido.", 
-                ephemeral=True
+                "Erro de processamento: O identificador do personagem é inválido.",
+                ephemeral=True,
             )
             return
 
@@ -304,7 +295,7 @@ class Admin(commands.Cog):
             SET owner_id = NULL 
             WHERE owner_id = ?
             """,
-            (target_player_id,)
+            (target_player_id,),
         )
 
         # Step 2: Assign the player_id to the newly selected character
@@ -314,15 +305,14 @@ class Admin(commands.Cog):
             SET owner_id = ? 
             WHERE character_id = ?
             """,
-            (target_player_id, new_character_id)
+            (target_player_id, new_character_id),
         )
 
         self.db_connection.commit()
 
         # Ephemeral retrieval of the new character's nomenclature for the UI validation
         cursor.execute(
-            "SELECT name FROM characters WHERE character_id = ?", 
-            (new_character_id,)
+            "SELECT name FROM characters WHERE character_id = ?", (new_character_id,)
         )
         row = cursor.fetchone()
         new_character_name = row[0] if row else "Entidade Desconhecida"
@@ -331,19 +321,19 @@ class Admin(commands.Cog):
         transference_embed = discord.Embed(
             title="Sincronização de Avatar Concluída",
             description=f"{interaction.user.mention} agora está jogando com **{new_character_name}**.",
-            color=discord.Color.teal()
+            color=discord.Color.teal(),
         )
 
         await interaction.response.send_message(embed=transference_embed)
 
     # ================================
     # NEXT TURN CONDITIONS BLOCK
-    #=================================
+    # =================================
 
     # manage_next_turn_conditions -----------------------------------------
     @app_commands.command(
-       name="manage_next_turn_conditions",
-       description="Permite gerenciar as condições de próximo turno" 
+        name="manage_next_turn_conditions",
+        description="Permite gerenciar as condições de próximo turno",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.choices(
@@ -357,7 +347,7 @@ class Admin(commands.Cog):
     @app_commands.describe(
         character="O personagem que sofrerá a intervenção tática",
         condition="Condição que será alterada",
-        value="Valor que será atribuído à condição"
+        value="Valor que será atribuído à condição",
     )
     @app_commands.default_permissions(administrator=True)
     async def manage_next_turn_conditions(
@@ -365,21 +355,21 @@ class Admin(commands.Cog):
         interaction: discord.Interaction,
         character: str,
         condition: app_commands.Choice[str],
-        value: int
+        value: int,
     ):
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.", 
-                ephemeral=True
+                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                ephemeral=True,
             )
             return
 
         condition_column = condition.value
         cursor = self.db_connection.cursor()
-        
+
         # SQLite UPSERT structure to guarantee atomic existence and update
         # String interpolation is mathematically safe here due to strict Discord choice validation
         upsert_query = f"""
@@ -388,14 +378,13 @@ class Admin(commands.Cog):
             ON CONFLICT(character_id) 
             DO UPDATE SET {condition_column} = excluded.{condition_column}
         """
-        
+
         cursor.execute(upsert_query, (target_character_id, value))
         self.db_connection.commit()
 
         # Ephemeral retrieval of the character's name for the UI validation
         cursor.execute(
-            "SELECT name FROM characters WHERE character_id = ?", 
-            (target_character_id,)
+            "SELECT name FROM characters WHERE character_id = ?", (target_character_id,)
         )
         row = cursor.fetchone()
         target_character_name = row[0] if row else "Entidade Desconhecida"
@@ -404,47 +393,41 @@ class Admin(commands.Cog):
         tactical_embed = discord.Embed(
             title="Mudança do Mestre Nas Condições de Próximo Turno",
             description=f"**{target_character_name}** teve suas condições de próximo turno alteradas.",
-            color=discord.Color.dark_red()
+            color=discord.Color.dark_red(),
         )
-        
+
         tactical_embed.add_field(
-            name="Parâmetro Afetado", 
-            value=f"`{condition.name.upper()}`", 
-            inline=True
+            name="Parâmetro Afetado", value=f"`{condition.name.upper()}`", inline=True
         )
         tactical_embed.add_field(
-            name="Novo Valor Alocado", 
-            value=f"`{value}`", 
-            inline=True
+            name="Novo Valor Alocado", value=f"`{value}`", inline=True
         )
 
         await interaction.response.send_message(embed=tactical_embed)
 
     # clear_next_turn_conditions --------------------------------------------
     @app_commands.command(
-       name="clear_next_turn_conditions",
-       description="Purga absolutamente todas as condições de próximo turno de um personagem, zerando-as."
+        name="clear_next_turn_conditions",
+        description="Purga absolutamente todas as condições de próximo turno de um personagem, zerando-as.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.describe(character="O personagem que terá suas condições obliteradas")
     @app_commands.default_permissions(administrator=True)
     async def clear_next_turn_conditions(
-        self,
-        interaction: discord.Interaction,
-        character: str
+        self, interaction: discord.Interaction, character: str
     ):
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.", 
-                ephemeral=True
+                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                ephemeral=True,
             )
             return
 
         cursor = self.db_connection.cursor()
-        
+
         # SQLite UPSERT structure to guarantee atomic existence and total zeroing of all conditions simultaneously
         upsert_query = """
             INSERT INTO next_turn_conditions (character_id, aim, evaluate, shock, feint)
@@ -456,14 +439,13 @@ class Admin(commands.Cog):
                 shock = 0, 
                 feint = 0
         """
-        
+
         cursor.execute(upsert_query, (target_character_id,))
         self.db_connection.commit()
 
         # Ephemeral retrieval of the character's nomenclature for the UI validation
         cursor.execute(
-            "SELECT name FROM characters WHERE character_id = ?", 
-            (target_character_id,)
+            "SELECT name FROM characters WHERE character_id = ?", (target_character_id,)
         )
         row = cursor.fetchone()
         target_character_name = row[0] if row else "Entidade Desconhecida"
@@ -472,35 +454,35 @@ class Admin(commands.Cog):
         tactical_embed = discord.Embed(
             title="Purgação de Estado Tático",
             description=f"Todas as variáveis de combate para o próximo turno de **{target_character_name}** foram matematicamente reduzidas ao zero absoluto.",
-            color=discord.Color.light_grey()
+            color=discord.Color.light_grey(),
         )
 
         await interaction.response.send_message(embed=tactical_embed)
 
     # view_next_turn_conditions ----------------------------------------------
     @app_commands.command(
-       name="view_next_turn_conditions",
-       description="Exibe analiticamente as condições de próximo turno vigentes de um personagem."
+        name="view_next_turn_conditions",
+        description="Exibe analiticamente as condições de próximo turno vigentes de um personagem.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.describe(character="O personagem cujas condições operacionais serão inspecionadas")
+    @app_commands.describe(
+        character="O personagem cujas condições operacionais serão inspecionadas"
+    )
     async def view_next_turn_conditions(
-        self,
-        interaction: discord.Interaction,
-        character: str
+        self, interaction: discord.Interaction, character: str
     ):
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.", 
-                ephemeral=True
+                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                ephemeral=True,
             )
             return
 
         cursor = self.db_connection.cursor()
-        
+
         # Executing a LEFT JOIN to capture the character's name even if no tactical row exists yet
         cursor.execute(
             """
@@ -509,19 +491,19 @@ class Admin(commands.Cog):
             LEFT JOIN next_turn_conditions n ON c.character_id = n.character_id
             WHERE c.character_id = ?
             """,
-            (target_character_id,)
+            (target_character_id,),
         )
         row = cursor.fetchone()
-        
+
         if not row:
             await interaction.response.send_message(
-                "Erro de processamento: A entidade especificada não foi localizada na matriz fundacional.", 
-                ephemeral=True
+                "Erro de processamento: A entidade especificada não foi localizada na matriz fundacional.",
+                ephemeral=True,
             )
             return
-            
+
         character_name, aim, evaluate, shock, feint = row
-        
+
         # Defensive coercion: if the LEFT JOIN yielded NULL (None), the structural value is inherently 0
         aim = aim if aim is not None else 0
         evaluate = evaluate if evaluate is not None else 0
@@ -531,15 +513,22 @@ class Admin(commands.Cog):
         # UI Presentation Pipeline
         inspection_embed = discord.Embed(
             title=f"Diagnóstico de Estado Tático — {character_name}",
-            color=discord.Color.blue()
+            color=discord.Color.blue(),
         )
-        
+
         inspection_embed.add_field(name="Apontar (Aim)", value=f"`{aim}`", inline=True)
-        inspection_embed.add_field(name="Avaliar (Evaluate)", value=f"`{evaluate}`", inline=True)
-        inspection_embed.add_field(name="Choque (Shock)", value=f"`{shock}`", inline=True)
-        inspection_embed.add_field(name="Finta (Feint)", value=f"`{feint}`", inline=True)
+        inspection_embed.add_field(
+            name="Avaliar (Evaluate)", value=f"`{evaluate}`", inline=True
+        )
+        inspection_embed.add_field(
+            name="Choque (Shock)", value=f"`{shock}`", inline=True
+        )
+        inspection_embed.add_field(
+            name="Finta (Feint)", value=f"`{feint}`", inline=True
+        )
 
         await interaction.response.send_message(embed=inspection_embed)
+
 
 async def setup(bot: commands.Bot):
     """
