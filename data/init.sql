@@ -1,4 +1,6 @@
--- 1. Matrizes Fundacionais (Entidades Independentes)
+-- ============================================================================
+-- 1. Matrizes Fundacionais e Catálogos Independentes
+-- ============================================================================
 
 CREATE TABLE "additional_stats" (
     "id_additional_stat" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,62 +54,6 @@ CREATE TABLE "current_attacks" (
     "critical_damage" INTEGER
 );
 
--- 2. Entidades Dependentes do Personagem (Com Cascata Estrita)
-
-CREATE TABLE "next_turn_conditions" (
-    "character_id" INTEGER PRIMARY KEY,
-    "aim" INTEGER,
-    "evaluate" INTEGER,
-    "shock" INTEGER,
-    "feint" INTEGER,
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE
-);
-
-
--- 3. Entidades Orbitais de Magia
-
-CREATE TABLE "magics" (
-    "magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT,
-    "attribute" TEXT,
-    "modifier" INTEGER,
-    "difficulty" TEXT,
-    "cost" INTEGER,
-    "resource_id" TEXT,
-    "description" TEXT
-);
-
--- 4. Tabelas Associativas Múltiplas (Com Cascata Estrita)
-
-CREATE TABLE "character_skills" (
-    "character_skill_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER,
-    "skill_id" INTEGER,
-    "relative_level" INTEGER,
-    UNIQUE("character_id", "skill_id"),
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE CASCADE
-);
-
-CREATE TABLE "character_additional_stats" (
-    "character_additional_stat_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER,
-    "additional_stat_id" INTEGER,
-    UNIQUE("character_id", "additional_stat_id"),
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("additional_stat_id") REFERENCES "additional_stats"("id_additional_stat") ON DELETE CASCADE
-);
-
-CREATE TABLE "character_magics" (
-    "character_magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER,
-    "magic_id" INTEGER,
-    "relative_level" INTEGER,
-    UNIQUE("character_id", "magic_id"),
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("magic_id") REFERENCES "magics"("magic_id") ON DELETE CASCADE
-);
-
 CREATE TABLE "items" (
     "item_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL,
@@ -116,27 +62,30 @@ CREATE TABLE "items" (
     "description" TEXT
 );
 
-CREATE TABLE "character_items" (
-    "character_item_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "character_id" INTEGER NOT NULL,
-    "item_id" INTEGER NOT NULL,
-    "quantity" INTEGER DEFAULT 1,
-    "is_equipped" INTEGER DEFAULT 0,
-    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("item_id") REFERENCES "items"("item_id") ON DELETE CASCADE
-);
 
 CREATE TABLE "melee_weapons" (
     "melee_weapon_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL,
-    "damage_modifier" TEXT,      -- Ex: 'st+2', 'st-1'
-    "damage_type" TEXT,          -- Ex: 'corte', 'perfuração', 'contusão'
-    "reach" TEXT,                -- Alcance (Ex: 'C', '1', '1,2')
-    "parry" TEXT,                -- Aparar (Ex: '0', '0U', 'Não')
-    "min_st" INTEGER DEFAULT 0,  -- ST Mínimo necessário
-    "weight" REAL DEFAULT 0.0,   -- Peso em kg / lbs
-    "cost" REAL DEFAULT 0.0,     -- Custo / Preço
-    "description" TEXT
+    "tl" INTEGER DEFAULT 0,              -- Nível Tecnológico (NT)
+    "min_st" INTEGER DEFAULT 0,          -- ST Mínimo necessário
+    "is_two_handed" INTEGER DEFAULT 0,   -- 1 se requer 2 mãos (marcação † ou ‡ no ST)
+    "weight" REAL DEFAULT 0.0,           -- Peso (kg)
+    "cost" REAL DEFAULT 0.0,             -- Custo ($)
+    "description" TEXT                   -- Notas gerais
+);
+
+CREATE TABLE "melee_weapon_modes" (
+    "mode_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "melee_weapon_id" INTEGER NOT NULL,
+    "mode_name" TEXT DEFAULT 'Padrão',   -- Ex: 'Corte', 'Estocada', 'Gancho'
+    "skill_name" TEXT NOT NULL,          -- Ex: 'Maça/Machado', 'Espada Curta'
+    "damage_base" TEXT NOT NULL,         -- 'GeB' (Swing) ou 'GdP' (Thrust)
+    "damage_modifier" INTEGER DEFAULT 0, -- Modificador numérico (ex: +2, -1, 0)
+    "damage_type" TEXT NOT NULL,         -- 'corte', 'perfuração', 'contusão'
+    "reach" TEXT NOT NULL,               -- 'C', '1', '1,2'
+    "parry" TEXT NOT NULL,               -- '0', '0U' (desequilibrada), 'Não'
+    "notes" TEXT,                        -- Ex: 'Gancho', 'Presa'
+    FOREIGN KEY("melee_weapon_id") REFERENCES "melee_weapons"("melee_weapon_id") ON DELETE CASCADE
 );
 
 CREATE TABLE "ranged_weapons" (
@@ -155,46 +104,131 @@ CREATE TABLE "ranged_weapons" (
     "description" TEXT
 );
 
-CREATE TABLE "armors" (
-    "armor_id" INTEGER PRIMARY KEY AUTOINCREMENT,
-    "name" TEXT NOT NULL,
-    "dr" INTEGER DEFAULT 0,      -- Resistência a Dano (RD / Damage Resistance)
-    "location" TEXT,             -- Local de Cobertura (Ex: 'Tronco', 'Cabeça', 'Braços')
-    "weight" REAL DEFAULT 0.0,   -- Peso
-    "cost" REAL DEFAULT 0.0,     -- Custo
+-- Catálogo de Partes do Corpo (Multiplicadores de Cobertura e Alvo de Impacto)
+CREATE TABLE "body_parts" (
+    "body_part_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL UNIQUE,          -- Ex: 'Cabeça', 'Tronco', 'Braços', 'Pernas', 'Mãos', 'Pés'
+    "cost_weight_factor" REAL NOT NULL,   -- Multiplicador decimal (Ex: Tronco = 1.0, Cabeça = 0.30, Braços = 0.50)
+    "hit_location_roll" TEXT,             -- Ponto de Impacto nos dados (Ex: '3-5', '9-11', '8, 12')
+    "notes" TEXT                          -- Observações do sistema (Ex: sub-áreas, proteções parciais)
+);
+
+-- Catálogo de Materiais de Armadura (Baseados em 100% de Cobertura / Tronco)
+CREATE TABLE "armor_materials" (
+    "material_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,                 -- Ex: 'Couro Médio', 'Cota de Malha Pesada', 'Placas Média'
+    "tl" INTEGER DEFAULT 0,               -- Nível Tecnológico (NT)
+    "dr" INTEGER NOT NULL,                -- Resistência a Dano (RD)
+    "is_flexible" INTEGER DEFAULT 0,      -- 1 para RD flexível (*), 0 para armadura rígida
+    "cost_torso" REAL NOT NULL,           -- Custo base de referência para o Tronco ($)
+    "weight_torso" REAL NOT NULL,         -- Peso base de referência para o Tronco (kg)
+    "don_time" INTEGER DEFAULT 30,        -- Tempo para vestir (segundos)
+    "notes" TEXT                          -- Ex: '-1 RD contra dano por perfuração', 'Combustível'
+);
+
+-- ============================================================================
+-- 2. Entidades Dependentes do Personagem (Com Cascata Estrita)
+-- ============================================================================
+
+CREATE TABLE "next_turn_conditions" (
+    "character_id" INTEGER PRIMARY KEY,
+    "aim" INTEGER,
+    "evaluate" INTEGER,
+    "shock" INTEGER,
+    "feint" INTEGER,
+    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- 3. Entidades Orbitais de Magia
+-- ============================================================================
+
+CREATE TABLE "magics" (
+    "magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT,
+    "attribute" TEXT,
+    "modifier" INTEGER,
+    "difficulty" TEXT,
+    "cost" INTEGER,
+    "resource_id" TEXT,
     "description" TEXT
 );
 
--- Inventário de Armas Corpo a Corpo do Personagem
+-- ============================================================================
+-- 4. Tabelas Associativas Múltiplas (Com Cascata Estrita)
+-- ============================================================================
+
+CREATE TABLE "character_skills" (
+    "character_skill_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "character_id" INTEGER NOT NULL,
+    "skill_id" INTEGER NOT NULL,
+    "relative_level" INTEGER,
+    UNIQUE("character_id", "skill_id"),
+    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+    FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE CASCADE
+);
+
+CREATE TABLE "character_additional_stats" (
+    "character_additional_stat_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "character_id" INTEGER NOT NULL,
+    "additional_stat_id" INTEGER NOT NULL,
+    UNIQUE("character_id", "additional_stat_id"),
+    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+    FOREIGN KEY("additional_stat_id") REFERENCES "additional_stats"("id_additional_stat") ON DELETE CASCADE
+);
+
+CREATE TABLE "character_magics" (
+    "character_magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "character_id" INTEGER NOT NULL,
+    "magic_id" INTEGER NOT NULL,
+    "relative_level" INTEGER,
+    UNIQUE("character_id", "magic_id"),
+    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+    FOREIGN KEY("magic_id") REFERENCES "magics"("magic_id") ON DELETE CASCADE
+);
+
+CREATE TABLE "character_items" (
+    "character_item_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "character_id" INTEGER NOT NULL,
+    "item_id" INTEGER NOT NULL,
+    "quantity" INTEGER DEFAULT 1,
+    "is_equipped" INTEGER DEFAULT 0,
+    FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+    FOREIGN KEY("item_id") REFERENCES "items"("item_id") ON DELETE CASCADE
+);
+
 CREATE TABLE "character_melee_weapons" (
     "character_melee_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
     "melee_weapon_id" INTEGER NOT NULL,
+    "custom_name" TEXT,                  -- Ex: 'Foice de Guerra de Titânio'
     "quantity" INTEGER DEFAULT 1,
     "is_equipped" INTEGER DEFAULT 0,
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("melee_weapon_id") REFERENCES "melee_weapons"("melee_weapon_id") ON DELETE CASCADE
+    FOREIGN KEY("melee_weapon_id") REFERENCES "melee_weapons"("melee_weapon_id") ON DELETE RESTRICT
 );
 
--- Inventário de Armas a Distância do Personagem
 CREATE TABLE "character_ranged_weapons" (
     "character_ranged_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
     "ranged_weapon_id" INTEGER NOT NULL,
     "quantity" INTEGER DEFAULT 1,
-    "current_shots" INTEGER DEFAULT 0, -- Tiros restantes na arma
+    "current_shots" INTEGER DEFAULT 0,
     "is_equipped" INTEGER DEFAULT 0,
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
     FOREIGN KEY("ranged_weapon_id") REFERENCES "ranged_weapons"("ranged_weapon_id") ON DELETE CASCADE
 );
 
--- Inventário de Armaduras do Personagem
+-- Inventário Modular de Peças de Armadura do Personagem
 CREATE TABLE "character_armors" (
     "character_armor_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
-    "armor_id" INTEGER NOT NULL,
+    "material_id" INTEGER NOT NULL,
+    "body_part_id" INTEGER NOT NULL,
+    "custom_name" TEXT,                   -- Nome opcional personalizado (Ex: 'Elmo de Batalha', 'Grevas de Infantaria')
     "quantity" INTEGER DEFAULT 1,
     "is_equipped" INTEGER DEFAULT 0,
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("armor_id") REFERENCES "armors"("armor_id") ON DELETE CASCADE
+    FOREIGN KEY("material_id") REFERENCES "armor_materials"("material_id") ON DELETE RESTRICT,
+    FOREIGN KEY("body_part_id") REFERENCES "body_parts"("body_part_id") ON DELETE RESTRICT
 );

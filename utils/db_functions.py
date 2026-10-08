@@ -390,3 +390,187 @@ def get_character_thumbnail_payload(
         return None, None
 
     return get_character_thumbnail_by_id(connection, character_id)
+<<<<<<< HEAD
+=======
+
+def get_character_inventory_data(
+    connection: sqlite3.Connection, owner_id: int
+) -> dict | None:
+    """Fetches all equipped and stored melee weapons with attack modes, ranged weapons,
+    modular armors, and items for the active character assigned to the owner."""
+    cursor = connection.cursor()
+
+    # 1. Resolve character identity
+    cursor.execute(
+        "SELECT character_id, name, money FROM characters WHERE owner_id = ?",
+        (owner_id,),
+    )
+    char_row = cursor.fetchone()
+    if not char_row:
+        return None
+
+    char_id, char_name, money = char_row
+
+    # 2. Query Melee Weapons & Modes
+    cursor.execute(
+        """
+        SELECT 
+            cmw.character_melee_id,
+            COALESCE(cmw.custom_name, w.name) AS weapon_name,
+            w.melee_weapon_id,
+            w.min_st,
+            w.weight,
+            w.cost,
+            cmw.quantity,
+            cmw.is_equipped
+        FROM character_melee_weapons cmw
+        JOIN melee_weapons w ON cmw.melee_weapon_id = w.melee_weapon_id
+        WHERE cmw.character_id = ?
+        ORDER BY cmw.is_equipped DESC, weapon_name ASC
+        """,
+        (char_id,),
+    )
+    melee_rows = cursor.fetchall()
+
+    melee_weapons = []
+    for row in melee_rows:
+        inst_id, name, w_id, min_st, weight, cost, qty, is_eq = row
+
+        # Query all attack modes for this specific physical weapon
+        cursor.execute(
+            """
+            SELECT mode_name, skill_name, damage_base, damage_modifier, damage_type, reach, parry, notes
+            FROM melee_weapon_modes
+            WHERE melee_weapon_id = ?
+            ORDER BY mode_id ASC
+            """,
+            (w_id,),
+        )
+        mode_rows = cursor.fetchall()
+        modes = [
+            {
+                "mode_name": m[0],
+                "skill_name": m[1],
+                "damage_base": m[2],
+                "damage_modifier": m[3],
+                "damage_type": m[4],
+                "reach": m[5],
+                "parry": m[6],
+                "notes": m[7],
+            }
+            for m in mode_rows
+        ]
+
+        melee_weapons.append(
+            {
+                "character_melee_id": inst_id,
+                "name": name,
+                "min_st": min_st,
+                "weight": weight,
+                "cost": cost,
+                "quantity": qty,
+                "is_equipped": is_eq,
+                "modes": modes,
+            }
+        )
+
+    # 3. Query Ranged Weapons
+    cursor.execute(
+        """
+        SELECT 
+            w.name,
+            w.damage,
+            w.acc,
+            w.range_half,
+            w.range_max,
+            w.shots,
+            w.weight,
+            crw.quantity,
+            crw.is_equipped
+        FROM character_ranged_weapons crw
+        JOIN ranged_weapons w ON crw.ranged_weapon_id = w.ranged_weapon_id
+        WHERE crw.character_id = ?
+        ORDER BY crw.is_equipped DESC, w.name ASC
+        """,
+        (char_id,),
+    )
+    ranged_weapons = [
+        {
+            "name": r[0],
+            "damage": r[1],
+            "acc": r[2],
+            "range_half": r[3],
+            "range_max": r[4],
+            "shots": r[5],
+            "weight": r[6],
+            "quantity": r[7],
+            "is_equipped": r[8],
+        }
+        for r in cursor.fetchall()
+    ]
+
+    # 4. Query Modular Armors
+    cursor.execute(
+        """
+        SELECT 
+            COALESCE(ca.custom_name, m.name || ' (' || bp.name || ')') AS piece_name,
+            m.dr,
+            m.is_flexible,
+            bp.name AS location,
+            (m.weight_torso * bp.cost_weight_factor) AS calc_weight,
+            (m.cost_torso * bp.cost_weight_factor) AS calc_cost,
+            ca.quantity,
+            ca.is_equipped
+        FROM character_armors ca
+        JOIN armor_materials m ON ca.material_id = m.material_id
+        JOIN body_parts bp ON ca.body_part_id = bp.body_part_id
+        WHERE ca.character_id = ?
+        ORDER BY ca.is_equipped DESC, bp.body_part_id ASC
+        """,
+        (char_id,),
+    )
+    armors = [
+        {
+            "name": a[0],
+            "dr": a[1],
+            "is_flexible": a[2],
+            "location": a[3],
+            "weight": a[4],
+            "cost": a[5],
+            "quantity": a[6],
+            "is_equipped": a[7],
+        }
+        for a in cursor.fetchall()
+    ]
+
+    # 5. Query General Items
+    cursor.execute(
+        """
+        SELECT i.name, i.weight, i.description, ci.quantity
+        FROM character_items ci
+        JOIN items i ON ci.item_id = i.item_id
+        WHERE ci.character_id = ?
+        ORDER BY i.name ASC
+        """,
+        (char_id,),
+    )
+    items = [
+        {
+            "name": it[0],
+            "weight": it[1],
+            "description": it[2],
+            "quantity": it[3],
+        }
+        for it in cursor.fetchall()
+    ]
+
+    return {
+        "character_id": char_id,
+        "character_name": char_name,
+        "money": money,
+        "melee_weapons": melee_weapons,
+        "ranged_weapons": ranged_weapons,
+        "armors": armors,
+        "items": items,
+    }
+>>>>>>> b1db456 (feat(inventory): add inventory system and slash command)
