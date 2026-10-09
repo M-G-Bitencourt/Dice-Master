@@ -7,6 +7,7 @@ from pathlib import Path
 
 from utils.db_functions import set_character_resource
 from utils.db_functions import get_character_profile
+from utils.db_functions import get_character_thumbnail_by_id
 
 # Dynamic resolution of the absolute path strictly for the database
 BASE_DIRECTORY = Path(__file__).resolve().parent.parent
@@ -326,6 +327,93 @@ class Admin(commands.Cog):
 
         await interaction.response.send_message(embed=transference_embed)
 
+    # manage_xp
+    @app_commands.command(
+        name="manage_xp",
+        description="Adiciona ou remove pontos de experiência (current_points) de um personagem.",
+    )
+    @app_commands.describe(
+        character="Selecione o personagem pelo nome.",
+        points="Quantidade de pontos (ex: 5 para adicionar, -3 para remover/gastar).",
+    )
+    @app_commands.autocomplete(character=character_autocomplete)
+    @app_commands.default_permissions(administrator=True)
+    async def manage_xp(
+        self, interaction: discord.Interaction, character: str, points: int
+    ):
+        """Modifies a character's available points/XP atomically within the database layer."""
+        await interaction.response.defer(ephemeral=True)
+
+        # 1. Parse and validate the target character primary key
+        try:
+            target_character_id = int(character)
+        except ValueError:
+            await interaction.followup.send(
+                "❌ **Erro de processamento:** O identificador do personagem fornecido é inválido.",
+                ephemeral=True,
+            )
+            return
+
+        cursor = self.db_connection.cursor()
+        cursor.execute(
+            "SELECT name, current_points FROM characters WHERE character_id = ?",
+            (target_character_id,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            await interaction.followup.send(
+                f"❌ **Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{target_character_id}`.",
+                ephemeral=True,
+            )
+            return
+
+        character_name = row[0]
+        previous_points = row[1] if row[1] is not None else 0
+        updated_points = previous_points + points
+
+        # 2. Update character points
+        cursor.execute(
+            "UPDATE characters SET current_points = ? WHERE character_id = ?",
+            (updated_points, target_character_id),
+        )
+        self.db_connection.commit()
+
+        # 3. Assemble confirmation embed
+        is_addition = points >= 0
+        xp_embed = discord.Embed(
+            title=f"AJUSTE DE PONTOS (XP): {character_name}",
+            color=discord.Color.green() if is_addition else discord.Color.red(),
+        )
+
+        transaction_type = "Concessão (+XP)" if is_addition else "Dedução (-XP)"
+
+        xp_embed.add_field(
+            name="Operação Homologada",
+            value=f"Tipo: `{transaction_type}`\nAjuste: `{points:+d} pts`",
+            inline=False,
+        )
+
+        xp_embed.add_field(
+            name="Demonstrativo de Pontos",
+            value=f"Anterior: `{previous_points} pts`\nAtual: `{updated_points} pts`",
+            inline=False,
+        )
+
+        # 4. Attach character thumbnail if present
+        character_file, thumbnail_url = get_character_thumbnail_by_id(
+            self.db_connection, target_character_id
+        )
+
+        if thumbnail_url:
+            xp_embed.set_thumbnail(url=thumbnail_url)
+
+        if character_file is not None:
+            await interaction.followup.send(
+                embed=xp_embed, file=character_file, ephemeral=True
+            )
+        else:
+            await interaction.followup.send(embed=xp_embed, ephemeral=True)
     # ================================
     # NEXT TURN CONDITIONS BLOCK
     # =================================

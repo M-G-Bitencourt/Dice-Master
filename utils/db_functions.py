@@ -390,8 +390,6 @@ def get_character_thumbnail_payload(
         return None, None
 
     return get_character_thumbnail_by_id(connection, character_id)
-<<<<<<< HEAD
-=======
 
 def get_character_inventory_data(
     connection: sqlite3.Connection, owner_id: int
@@ -573,4 +571,36 @@ def get_character_inventory_data(
         "armors": armors,
         "items": items,
     }
->>>>>>> b1db456 (feat(inventory): add inventory system and slash command)
+
+
+def modify_character_points(
+    connection: sqlite3.Connection, character_id: int, delta_points: int
+) -> tuple[str, int, int]:
+    """
+    Atomically increments or decrements a character's current_points (XP).
+    Returns a tuple containing: (character_name, previous_points, updated_points).
+    Raises ValueError if the character_id is not found in the database.
+    """
+    cursor = connection.cursor()
+    cursor.execute(
+        "SELECT name, current_points FROM characters WHERE character_id = ?",
+        (character_id,),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        raise ValueError(
+            f"Database Anomaly: No character entity found with character_id {character_id}."
+        )
+
+    character_name = row[0]
+    previous_points = row[1] if row[1] is not None else 0
+    updated_points = previous_points + delta_points
+
+    cursor.execute(
+        "UPDATE characters SET current_points = ? WHERE character_id = ?",
+        (updated_points, character_id),
+    )
+    connection.commit()
+
+    return character_name, previous_points, updated_points
