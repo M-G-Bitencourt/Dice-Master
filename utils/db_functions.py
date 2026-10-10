@@ -186,10 +186,9 @@ def get_character_strength(connection: sqlite3.Connection, owner_id: int) -> int
 def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict:
     """
     Retrieves the exact attribute matrix for a specific character based exclusively
-    on the denormalized 22-column schema, omitting any extraneous statistical queries.
+    on the denormalized 21-column schema, omitting any extraneous statistical queries.
     """
     cursor = connection.cursor()
-
     cursor.execute(
         """
         SELECT 
@@ -197,7 +196,7 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
             additional_max_pv, additional_vont, additional_per, 
             additional_max_pf, additional_basic_speed, additional_basic_move, 
             energy_reserve, normal_diffuse_homogeneous_unded, money,
-            current_pv, current_pf, current_er, current_points, total_points
+            current_pv, current_pf, current_er, current_points
         FROM characters 
         WHERE owner_id = ?
         """,
@@ -233,7 +232,6 @@ def get_character_profile(connection: sqlite3.Connection, owner_id: int) -> dict
         "current_pf": row[18],
         "current_er": row[19],
         "current_points": row[20],
-        "total_points": row[21],
     }
 
 
@@ -241,11 +239,10 @@ def get_character_profile_by_id(
     connection: sqlite3.Connection, character_id: int
 ) -> dict:
     """
-    Retrieves the comprehensive attribute matrix for a specific character based
-    exclusively on the denormalized 22-column schema using the primary character_id.
+    Retrieves the comprehensive attribute matrix for a specific character based exclusively
+    on the denormalized 21-column schema using the primary character_id.
     """
     cursor = connection.cursor()
-
     cursor.execute(
         """
         SELECT 
@@ -253,7 +250,7 @@ def get_character_profile_by_id(
             additional_max_pv, additional_vont, additional_per, 
             additional_max_pf, additional_basic_speed, additional_basic_move, 
             energy_reserve, normal_diffuse_homogeneous_unded, money,
-            current_pv, current_pf, current_er, current_points, total_points
+            current_pv, current_pf, current_er, current_points
         FROM characters 
         WHERE character_id = ?
         """,
@@ -289,7 +286,6 @@ def get_character_profile_by_id(
         "current_pf": row[18],
         "current_er": row[19],
         "current_points": row[20],
-        "total_points": row[21],
     }
 
 
