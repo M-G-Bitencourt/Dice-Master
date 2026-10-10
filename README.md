@@ -25,6 +25,7 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /manage_next_turn_conditions    | Manage shock, evaluate, aim, and feint statuses. |
 | /clear_next_turn_conditions     | Clear all feint, evaluate, aim, and shock modifiers. |
 | /view_next_turn_conditions      | View feint, aim, evaluate, and shock modifiers for a specific character. |
+| /manage_xp                      | Adds or removes character points from a character. |
 
 ## Skill Test Commands
 | Command | Description |
@@ -37,6 +38,12 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | :---: | :---: |
 | /sheet | Display your character sheet in an ephemeral message. |
 | /sheet_view | Display any player or NPC character sheet for the GM. |
+
+## Inventory Commands
+| Command | Description |
+| :---: | :---: |
+| /manage_money | Adds or removes money from a character. |
+| /inventory | Displays the complete inventory. |
 
 ## Other Tests Commands
 | Command | Description |
