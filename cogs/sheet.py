@@ -5,11 +5,13 @@ from pathlib import Path
 
 import sqlite3
 
-from utils.db_functions import get_character_profile
-from utils.db_functions import get_character_thumbnail_payload
-from utils.db_functions import get_character_thumbnail_by_id
-from utils.db_functions import get_character_profile_by_id
-
+from utils.db_functions import (
+    _resolve_character_id,
+    get_character_profile,
+    get_character_profile_by_id,
+    get_character_thumbnail_by_id,
+    get_character_thumbnail_payload,
+)
 
 class Sheet(commands.Cog):
     """ """
@@ -266,7 +268,6 @@ class Sheet(commands.Cog):
             )
         else:
             await interaction.followup.send(embed=sheet_view_embed, ephemeral=True)
-
 
 async def setup(bot: commands.Bot):
     """

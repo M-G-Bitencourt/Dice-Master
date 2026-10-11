@@ -600,3 +600,103 @@ def modify_character_points(
     connection.commit()
 
     return character_name, previous_points, updated_points
+
+
+def get_character_skills_data(
+    connection: sqlite3.Connection, character_id: int
+) -> dict | None:
+    """
+    Retrieves the complete list of registered skills for a character,
+    calculating effective skill levels (NH) based on foundational attributes,
+    secondary characteristics (Per/Will), and relative skill levels.
+    """
+    cursor = connection.cursor()
+
+    # 1. Fetch character foundational attributes and name
+    cursor.execute(
+        """
+        SELECT 
+            name, st, dx, iq, ht, additional_per, additional_vont
+        FROM characters 
+        WHERE character_id = ?
+        """,
+        (character_id,),
+    )
+    char_row = cursor.fetchone()
+    if not char_row:
+        return None
+
+    char_name, st, dx, iq, ht, add_per, add_vont = char_row
+    per = iq + (add_per or 0)
+    vont = iq + (add_vont or 0)
+
+    # 2. Fetch associated skills joined with the global skills catalogue
+    cursor.execute(
+        """
+        SELECT 
+            s.skill_id,
+            s.name,
+            s.attribute,
+            s.difficulty,
+            s.description,
+            cs.relative_level
+        FROM character_skills cs
+        JOIN skills s ON cs.skill_id = s.skill_id
+        WHERE cs.character_id = ?
+        ORDER BY s.name COLLATE NOCASE ASC
+        """,
+        (character_id,),
+    )
+    skill_rows = cursor.fetchall()
+
+    skills_list = []
+    for row in skill_rows:
+        s_id, s_name, attr_raw, diff, desc, rel_level = row
+        rel = rel_level if rel_level is not None else 0
+        attr_norm = (attr_raw or "DX").strip().upper()
+
+        # Map foundational attribute base
+        if attr_norm in ("DX",):
+            base_val = dx
+            attr_label = "DX"
+        elif attr_norm in ("IQ",):
+            base_val = iq
+            attr_label = "IQ"
+        elif attr_norm in ("HT",):
+            base_val = ht
+            attr_label = "HT"
+        elif attr_norm in ("ST",):
+            base_val = st
+            attr_label = "ST"
+        elif attr_norm in ("PER", "PERCEPÇÃO", "PERCEPCAO"):
+            base_val = per
+            attr_label = "Per"
+        elif attr_norm in ("VONT", "VONTADE", "WILL"):
+            base_val = vont
+            attr_label = "Vont"
+        else:
+            base_val = dx
+            attr_label = attr_raw or "DX"
+
+        # Calculate effective NH
+        nh = base_val + rel
+        rel_str = f"{attr_label}{rel:+d}"
+
+        skills_list.append(
+            {
+                "skill_id": s_id,
+                "name": s_name,
+                "attribute": attr_label,
+                "difficulty": diff or "M",
+                "description": desc or "Nenhuma descrição detalhada disponível.",
+                "relative_level": rel,
+                "relative_display": rel_str,
+                "nh": nh,
+            }
+        )
+
+    return {
+        "character_id": character_id,
+        "character_name": char_name,
+        "skills": skills_list,
+    }

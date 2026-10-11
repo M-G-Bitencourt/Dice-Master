@@ -56,6 +56,7 @@ class DiceMasterBot(commands.Bot):
             "cogs.other_tests",
             "cogs.skill_test",
             "cogs.sheet",
+            "cogs.skills",
             "cogs.inventory",
         ]
 
