@@ -387,6 +387,7 @@ def get_character_thumbnail_payload(
 
     return get_character_thumbnail_by_id(connection, character_id)
 
+
 def get_character_inventory_data(
     connection: sqlite3.Connection, owner_id: int
 ) -> dict | None:
@@ -602,6 +603,26 @@ def modify_character_points(
     return character_name, previous_points, updated_points
 
 
+def _get_character_additional_stats_dict(
+    connection: sqlite3.Connection, character_id: int
+) -> dict[str, int]:
+    """
+    Queries the character_additional_stats table and returns a dictionary 
+    mapping the stat name (uppercase) to its current value for the given character.
+    """
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT ads.stat, cas.value
+        FROM character_additional_stats cas
+        JOIN additional_stats ads ON cas.additional_stat_id = ads.id_additional_stat
+        WHERE cas.character_id = ?
+        """,
+        (character_id,),
+    )
+    return {str(row[0]).strip().upper(): int(row[1]) for row in cursor.fetchall()}
+
+
 def get_character_skills_data(
     connection: sqlite3.Connection, character_id: int
 ) -> dict | None:
@@ -630,7 +651,10 @@ def get_character_skills_data(
     per = iq + (add_per or 0)
     vont = iq + (add_vont or 0)
 
-    # 2. Fetch associated skills joined with the global skills catalogue
+    # 2. Fetch additional stats dictionary
+    additional_stats = _get_character_additional_stats_dict(connection, character_id)
+
+    # 3. Fetch associated skills joined with the global skills catalogue
     cursor.execute(
         """
         SELECT 
@@ -674,6 +698,9 @@ def get_character_skills_data(
         elif attr_norm in ("VONT", "VONTADE", "WILL"):
             base_val = vont
             attr_label = "Vont"
+        elif attr_norm in additional_stats:
+            base_val = additional_stats[attr_norm]
+            attr_label = attr_raw or attr_norm
         else:
             base_val = dx
             attr_label = attr_raw or "DX"
@@ -699,4 +726,121 @@ def get_character_skills_data(
         "character_id": character_id,
         "character_name": char_name,
         "skills": skills_list,
+    }
+
+
+def get_character_magics_data(
+    connection: sqlite3.Connection, character_id: int
+) -> dict | None:
+    """
+    Retrieves the complete list of registered magics for a character,
+    calculating effective NH based on foundational attributes and relative levels.
+    Maps resources to normalized uppercase abbreviations (PV, PF, ER).
+    Groups magics by their school (magic_class).
+    """
+    cursor = connection.cursor()
+
+    # 1. Fetch character foundational attributes and name
+    cursor.execute(
+        """
+        SELECT 
+            name, st, dx, iq, ht, additional_per, additional_vont
+        FROM characters 
+        WHERE character_id = ?
+        """,
+        (character_id,),
+    )
+    char_row = cursor.fetchone()
+    if not char_row:
+        return None
+
+    char_name, st, dx, iq, ht, add_per, add_vont = char_row
+    per = iq + (add_per or 0)
+    vont = iq + (add_vont or 0)
+
+    # 2. Fetch additional stats dictionary
+    additional_stats = _get_character_additional_stats_dict(connection, character_id)
+
+    # 3. Fetch associated magics joined with the global magics catalogue and schools
+    cursor.execute(
+        """
+        SELECT 
+            m.magic_id,
+            m.name,
+            m.attribute,
+            m.difficulty,
+            m.cost,
+            m.resource,
+            m.description,
+            cm.relative_level,
+            mc.class
+        FROM character_magics cm
+        JOIN magics m ON cm.magic_id = m.magic_id
+        LEFT JOIN magic_classes mc ON m.class = mc.magic_class_id
+        WHERE cm.character_id = ?
+        ORDER BY mc.class COLLATE NOCASE ASC, m.name COLLATE NOCASE ASC
+        """,
+        (character_id,),
+    )
+    magic_rows = cursor.fetchall()
+
+    magics_list = []
+    for row in magic_rows:
+        m_id, m_name, attr_raw, diff, cost, res_raw, desc, rel_level, school = row
+        rel = rel_level if rel_level is not None else 0
+        attr_norm = (attr_raw or "IQ").strip().upper()
+
+        # Map foundational attribute base
+        if attr_norm in ("IQ",):
+            base_val = iq
+            attr_label = "IQ"
+        elif attr_norm in ("DX",):
+            base_val = dx
+            attr_label = "DX"
+        elif attr_norm in ("HT",):
+            base_val = ht
+            attr_label = "HT"
+        elif attr_norm in ("ST",):
+            base_val = st
+            attr_label = "ST"
+        elif attr_norm in ("PER", "PERCEPÇÃO", "PERCEPCAO"):
+            base_val = per
+            attr_label = "Per"
+        elif attr_norm in ("VONT", "VONTADE", "WILL"):
+            base_val = vont
+            attr_label = "Vont"
+        elif attr_norm in additional_stats:
+            base_val = additional_stats[attr_norm]
+            attr_label = attr_raw or attr_norm
+        else:
+            base_val = iq
+            attr_label = attr_raw or "IQ"
+
+        # Calculate effective NH
+        nh = base_val + rel
+        rel_str = f"{attr_label}{rel:+d}"
+
+        # Resource mapping normalization
+        res_label = (res_raw or "PF").strip().upper()
+
+        magics_list.append(
+            {
+                "magic_id": m_id,
+                "name": m_name,
+                "school": school or "Sem Escola",
+                "attribute": attr_label,
+                "difficulty": diff or "M",
+                "cost": cost or 0,
+                "resource": res_label,
+                "description": desc or "Nenhuma descrição detalhada disponível.",
+                "relative_level": rel,
+                "relative_display": rel_str,
+                "nh": nh,
+            }
+        )
+
+    return {
+        "character_id": character_id,
+        "character_name": char_name,
+        "magics": magics_list,
     }
