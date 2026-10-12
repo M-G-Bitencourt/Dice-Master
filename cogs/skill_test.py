@@ -28,9 +28,8 @@ class Skill_tests(commands.Cog):
     @app_commands.command(description="Realiza os testes de Habilidade")
     @app_commands.describe(
         nh="Seu Nível de Habilidade na perícia",
-        modificador="Modificador de Dificuldade",
     )
-    async def test(self, interaction: discord.Interaction, nh: int, modificador: int):
+    async def test(self, interaction: discord.Interaction, nh: int):
         """
         Resolves a foundational GURPS 3d6 success test against an effective skill level.
         Enforces immediate network deferral to shield the execution window against transaction latency.
@@ -49,7 +48,7 @@ class Skill_tests(commands.Cog):
             dices = [randint(1, 6) for _ in range(3)]
 
         dice_pool = sum(dices)
-        effective_sl = nh + modificador
+        effective_sl = nh
 
         # Structural safeguard: Effective Skill Level cannot collapse below absolute zero
         if effective_sl < 0:
@@ -101,10 +100,9 @@ class Skill_tests(commands.Cog):
             name="Parada de Dados", value=f"`{dices} = {dice_pool}`", inline=False
         )
 
-        modificador_sign = "+" if modificador >= 0 else "-"
         test_embed.add_field(
             name="Nível de Habilidade",
-            value=f"NH Básico: {nh}\nModificador: {modificador}\n`NH Efetivo: {effective_sl}` -> {nh} {modificador_sign} {abs(modificador)}",
+            value=f"`NH Efetivo: {effective_sl}`",
             inline=False,
         )
 
@@ -142,17 +140,13 @@ class Skill_tests(commands.Cog):
     @app_commands.command(description="Realiza uma disputá Rápida de habilidades")
     @app_commands.describe(
         nh1="Seu NH",
-        modificador1="Seus modificadores de dificuldade",
         nh2="Nh do seu adversário",
-        modificador2="Modificadores de dificuldade do seu adversário",
     )
     async def qkd(
         self,
         interaction: discord.Interaction,
         nh1: int,
-        modificador1: int,
         nh2: int,
-        modificador2: int,
     ):
         """
         Resolves a generic GURPS Quick Contest between two effective skill levels.
@@ -163,8 +157,8 @@ class Skill_tests(commands.Cog):
 
         player_id = interaction.user.id
 
-        effective_sl1 = nh1 + modificador1
-        effective_sl2 = nh2 + modificador2
+        effective_sl1 = nh1
+        effective_sl2 = nh2
 
         # Invoking the core relational dispute logic mapping
         result = quick_dispute(player_id, effective_sl1, effective_sl2)
@@ -217,17 +211,13 @@ class Skill_tests(commands.Cog):
             qkd_embed.description = "Resultado decidido pela margem do teste."
 
         # Generating dynamic signs for presentation cleanliness
-        sign1 = "+" if modificador1 >= 0 else "-"
-        sign2 = "+" if modificador2 >= 0 else "-"
         margin_difference = margin1 - margin2
 
         qkd_embed.add_field(
             name="Você",
             value=(
                 f"`Dados: {dices1} = {dice_pool1}`\n"
-                f"NH Base: {nh1}\n"
-                f"Modificador: {modificador1}\n"
-                f"`NH Efetivo: {effective_sl1}` -> {nh1} {sign1} {abs(modificador1)}\n"
+                f"`NH Efetivo: {effective_sl1}`\n"
                 f"Sucesso: {'Sim' if success_roll1 else 'Não'}\n"
                 f"`Margem: {margin1}`"
             ),
@@ -237,9 +227,7 @@ class Skill_tests(commands.Cog):
             name="Oponente",
             value=(
                 f"`Dados: {dices2} = {dice_pool2}`\n"
-                f"NH Base: {nh2}\n"
-                f"Modificador: {modificador2}\n"
-                f"`NH Efetivo: {effective_sl2}` -> {nh2} {sign2} {abs(modificador2)}\n"
+                f"`NH Efetivo: {effective_sl2}`\n"
                 f"Sucesso: {'Sim' if success_roll2 else 'Não'}\n"
                 f"`Margem: {margin2}`"
             ),
