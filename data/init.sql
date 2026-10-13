@@ -125,14 +125,14 @@ CREATE TABLE "character_additional_stats" (
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
     FOREIGN KEY("additional_stat_id") REFERENCES "additional_stats"("id_additional_stat") ON DELETE CASCADE
 );
-CREATE TABLE "character_magics" (
-    "character_magic_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE "character_spells" (
+    "character_spell_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "character_id" INTEGER NOT NULL,
-    "magic_id" INTEGER NOT NULL,
+    "spell_id" INTEGER NOT NULL,
     "relative_level" INTEGER,
-    UNIQUE("character_id", "magic_id"),
+    UNIQUE("character_id", "spell_id"),
     FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
-    FOREIGN KEY("magic_id") REFERENCES "magics"("magic_id") ON DELETE CASCADE
+    FOREIGN KEY("spell_id") REFERENCES "spells"("spell_id") ON DELETE CASCADE
 );
 CREATE TABLE "character_items" (
     "character_item_id" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,13 +185,13 @@ CREATE TABLE "character_skills" (
 	FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
 	FOREIGN KEY("skill_id") REFERENCES "skills"("skill_id") ON DELETE CASCADE
 );
-CREATE TABLE "magic_classes" (
-	"magic_class_id"	INTEGER NOT NULL UNIQUE,
+CREATE TABLE "spell_classes" (
+	"spell_class_id"	INTEGER NOT NULL UNIQUE,
 	"class"	TEXT,
-	PRIMARY KEY("magic_class_id" AUTOINCREMENT)
+	PRIMARY KEY("spell_class_id" AUTOINCREMENT)
 );
-CREATE TABLE "magics" (
-	"magic_id"	INTEGER,
+CREATE TABLE "spells" (
+	"spell_id"	INTEGER,
 	"name"	TEXT,
 	"attribute"	TEXT,
 	"class"	INTEGER,
@@ -199,6 +199,6 @@ CREATE TABLE "magics" (
 	"cost"	INTEGER,
 	"resource"	TEXT,
 	"description"	TEXT,
-	PRIMARY KEY("magic_id" AUTOINCREMENT),
-	FOREIGN KEY("class") REFERENCES "magic_classes"("magic_class_id")
+	PRIMARY KEY("spell_id" AUTOINCREMENT),
+	FOREIGN KEY("class") REFERENCES "spell_classes"("spell_class_id")
 );

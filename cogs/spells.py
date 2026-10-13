@@ -7,20 +7,20 @@ import sqlite3
 
 from utils.db_functions import (
     _resolve_character_id,
-    get_character_magics_data,
+    get_character_spells_data,
 )
 
-class MagicSelect(discord.ui.Select):
-    """Dropdown component for inspecting details of a specific character magic."""
+class SpellSelect(discord.ui.Select):
+    """Dropdown component for inspecting details of a specific character spell."""
 
-    def __init__(self, magics_chunk: list[dict]):
+    def __init__(self, spells_chunk: list[dict]):
         options = [
             discord.SelectOption(
                 label=m["name"][:100],
-                value=str(m["magic_id"]),
+                value=str(m["spell_id"]),
                 description=f"NH {m['nh']} | Custo: {m['cost']} {m['resource']} | {m['attribute']}/{m['difficulty']}"[:100],
             )
-            for m in magics_chunk
+            for m in spells_chunk
         ]
         super().__init__(
             placeholder="Selecione uma magia para inspecionar...",
@@ -30,28 +30,28 @@ class MagicSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        """Updates the interaction message with the full rules embed of the selected magic."""
-        view: MagicListView = self.view  # type: ignore
+        """Updates the interaction message with the full rules embed of the selected spell."""
+        view: SpellListView = self.view  # type: ignore
         selected_id = int(self.values[0])
-        selected_magic = view.magics_by_id.get(selected_id)
+        selected_spell = view.spells_by_id.get(selected_id)
 
-        if not selected_magic:
+        if not selected_spell:
             await interaction.response.send_message(
                 "Erro: Magia não localizada no registro atual.", ephemeral=True
             )
             return
 
         desc_raw = (
-            selected_magic["description"]
+            selected_spell["description"]
             or "Nenhuma descrição detalhada disponível."
         )
 
         # Header containing essential metrics at the top of the card
         header = (
-            f"**NH:** `{selected_magic['nh']}` | "
-            f"**Custo:** `{selected_magic['cost']} {selected_magic['resource']}`\n"
-            f"**Nível Relativo:** `{selected_magic['relative_display']}` | "
-            f"**Dificuldade:** `{selected_magic['attribute']} / {selected_magic['difficulty']}`\n\n"
+            f"**NH:** `{selected_spell['nh']}` | "
+            f"**Custo:** `{selected_spell['cost']} {selected_spell['resource']}`\n"
+            f"**Nível Relativo:** `{selected_spell['relative_display']}` | "
+            f"**Dificuldade:** `{selected_spell['attribute']} / {selected_spell['difficulty']}`\n\n"
             f"**Descrição e Regras:**\n"
         )
 
@@ -63,7 +63,7 @@ class MagicSelect(discord.ui.Select):
             desc_text = desc_raw
 
         embed = discord.Embed(
-            title=f"Magia: {selected_magic['name']}",
+            title=f"Magia: {selected_spell['name']}",
             description=header + desc_text,
             color=discord.Color.purple(),
         )
@@ -74,23 +74,23 @@ class MagicSelect(discord.ui.Select):
             view=view,
         )
 
-class MagicListView(discord.ui.View):
-    """Interactive view managing the paginated compact magic list and dropdown."""
+class SpellListView(discord.ui.View):
+    """Interactive view managing the paginated compact spell list and dropdown."""
 
     def __init__(
         self,
         character_name: str,
-        magics: list[dict],
+        spells: list[dict],
         author_id: int,
     ):
         super().__init__(timeout=180.0)
         self.character_name = character_name
-        self.magics = magics
+        self.spells = spells
         self.author_id = author_id
-        self.magics_by_id = {m["magic_id"]: m for m in magics}
+        self.spells_by_id = {m["spell_id"]: m for m in spells}
         self.page_size = 25
         self.current_page = 0
-        self.total_pages = max(1, (len(magics) - 1) // self.page_size + 1)
+        self.total_pages = max(1, (len(spells) - 1) // self.page_size + 1)
 
         self.update_components()
 
@@ -108,7 +108,7 @@ class MagicListView(discord.ui.View):
         """Renders the compact formatted Markdown list for the current page, grouped by school."""
         start_idx = self.current_page * self.page_size
         end_idx = start_idx + self.page_size
-        page_magics = self.magics[start_idx:end_idx]
+        page_spells = self.spells[start_idx:end_idx]
 
         lines = [f"# Magias: **{self.character_name}**"]
         if self.total_pages > 1:
@@ -116,7 +116,7 @@ class MagicListView(discord.ui.View):
         lines.append("---")
 
         current_school = None
-        for m in page_magics:
+        for m in page_spells:
             school = m.get("school", "Sem Escola")
             if school != current_school:
                 lines.append(f"## {school}")
@@ -136,9 +136,9 @@ class MagicListView(discord.ui.View):
 
         start_idx = self.current_page * self.page_size
         end_idx = start_idx + self.page_size
-        page_magics = self.magics[start_idx:end_idx]
+        page_spells = self.spells[start_idx:end_idx]
 
-        self.add_item(MagicSelect(page_magics))
+        self.add_item(SpellSelect(page_spells))
 
         if self.total_pages > 1:
             prev_button = discord.ui.Button(
@@ -191,8 +191,8 @@ class MagicListView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
-class Magics(commands.Cog):
-    """Cog responsible for character magic management and inspection."""
+class Spells(commands.Cog):
+    """Cog responsible for character spell management and inspection."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -222,7 +222,7 @@ class Magics(commands.Cog):
         ]
 
     @app_commands.command(
-        name="master_list_magics",
+        name="master_list_spells",
         description="Exibe a lista de magias com cálculo de NH e inspeção detalhada.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
@@ -230,12 +230,12 @@ class Magics(commands.Cog):
     @app_commands.describe(
         character="Personagem a ser consultado (apenas administradores podem consultar terceiros)."
     )
-    async def master_list_magics(
+    async def master_list_spells(
         self,
         interaction: discord.Interaction,
         character: str | None = None,
     ):
-        """Renders character magics with effective NH calculation and inspection dropdown."""
+        """Renders character spells with effective NH calculation and inspection dropdown."""
         await interaction.response.defer(ephemeral=True)
 
         if character is not None:
@@ -259,27 +259,27 @@ class Magics(commands.Cog):
                 )
                 return
 
-        magics_data = get_character_magics_data(
+        spells_data = get_character_spells_data(
             self.db_connection, target_char_id
         )
 
-        if not magics_data:
+        if not spells_data:
             await interaction.followup.send(
                 f"Erro de consistência: Personagem com ID `{target_char_id}` não foi localizado.",
                 ephemeral=True,
             )
             return
 
-        if not magics_data["magics"]:
+        if not spells_data["spells"]:
             await interaction.followup.send(
-                f"O personagem {magics_data['character_name']} não possui nenhuma magia cadastrada.",
+                f"O personagem {spells_data['character_name']} não possui nenhuma magia cadastrada.",
                 ephemeral=True,
             )
             return
 
-        view = MagicListView(
-            character_name=magics_data["character_name"],
-            magics=magics_data["magics"],
+        view = SpellListView(
+            character_name=spells_data["character_name"],
+            spells=spells_data["spells"],
             author_id=interaction.user.id,
         )
 
@@ -290,11 +290,11 @@ class Magics(commands.Cog):
         )
 
     @app_commands.command(
-        name="list_magics",
+        name="list_spells",
         description="Exibe a lista de magias do seu personagem com cálculo de NH e inspeção detalhada.",
     )
-    async def list_magics(self, interaction: discord.Interaction):
-        """Renders the caller's character magics with effective NH calculation and inspection dropdown."""
+    async def list_spells(self, interaction: discord.Interaction):
+        """Renders the caller's character spells with effective NH calculation and inspection dropdown."""
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -308,27 +308,27 @@ class Magics(commands.Cog):
             )
             return
 
-        magics_data = get_character_magics_data(
+        spells_data = get_character_spells_data(
             self.db_connection, target_char_id
         )
 
-        if not magics_data:
+        if not spells_data:
             await interaction.followup.send(
                 f"Erro de consistência: Personagem com ID `{target_char_id}` não foi localizado.",
                 ephemeral=True,
             )
             return
 
-        if not magics_data["magics"]:
+        if not spells_data["spells"]:
             await interaction.followup.send(
-                f"O personagem {magics_data['character_name']} não possui nenhuma magia cadastrada.",
+                f"O personagem {spells_data['character_name']} não possui nenhuma magia cadastrada.",
                 ephemeral=True,
             )
             return
 
-        view = MagicListView(
-            character_name=magics_data["character_name"],
-            magics=magics_data["magics"],
+        view = SpellListView(
+            character_name=spells_data["character_name"],
+            spells=spells_data["spells"],
             author_id=interaction.user.id,
         )
 
@@ -340,4 +340,4 @@ class Magics(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     """Mandatory asynchronous entry point to load the extension."""
-    await bot.add_cog(Magics(bot))
+    await bot.add_cog(Spells(bot))

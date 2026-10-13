@@ -729,14 +729,14 @@ def get_character_skills_data(
     }
 
 
-def get_character_magics_data(
+def get_character_spells_data(
     connection: sqlite3.Connection, character_id: int
 ) -> dict | None:
     """
-    Retrieves the complete list of registered magics for a character,
+    Retrieves the complete list of registered spells for a character,
     calculating effective NH based on foundational attributes and relative levels.
     Maps resources to normalized uppercase abbreviations (PV, PF, ER).
-    Groups magics by their school (magic_class).
+    Groups spells by their school (spell_class).
     """
     cursor = connection.cursor()
 
@@ -761,11 +761,11 @@ def get_character_magics_data(
     # 2. Fetch additional stats dictionary
     additional_stats = _get_character_additional_stats_dict(connection, character_id)
 
-    # 3. Fetch associated magics joined with the global magics catalogue and schools
+    # 3. Fetch associated spells joined with the global spells catalogue and schools
     cursor.execute(
         """
         SELECT 
-            m.magic_id,
+            m.spell_id,
             m.name,
             m.attribute,
             m.difficulty,
@@ -774,18 +774,18 @@ def get_character_magics_data(
             m.description,
             cm.relative_level,
             mc.class
-        FROM character_magics cm
-        JOIN magics m ON cm.magic_id = m.magic_id
-        LEFT JOIN magic_classes mc ON m.class = mc.magic_class_id
+        FROM character_spells cm
+        JOIN spells m ON cm.spell_id = m.spell_id
+        LEFT JOIN spell_classes mc ON m.class = mc.spell_class_id
         WHERE cm.character_id = ?
         ORDER BY mc.class COLLATE NOCASE ASC, m.name COLLATE NOCASE ASC
         """,
         (character_id,),
     )
-    magic_rows = cursor.fetchall()
+    spell_rows = cursor.fetchall()
 
-    magics_list = []
-    for row in magic_rows:
+    spells_list = []
+    for row in spell_rows:
         m_id, m_name, attr_raw, diff, cost, res_raw, desc, rel_level, school = row
         rel = rel_level if rel_level is not None else 0
         attr_norm = (attr_raw or "IQ").strip().upper()
@@ -823,9 +823,9 @@ def get_character_magics_data(
         # Resource mapping normalization
         res_label = (res_raw or "PF").strip().upper()
 
-        magics_list.append(
+        spells_list.append(
             {
-                "magic_id": m_id,
+                "spell_id": m_id,
                 "name": m_name,
                 "school": school or "Sem Escola",
                 "attribute": attr_label,
@@ -842,5 +842,5 @@ def get_character_magics_data(
     return {
         "character_id": character_id,
         "character_name": char_name,
-        "magics": magics_list,
+        "spells": spells_list,
     }
