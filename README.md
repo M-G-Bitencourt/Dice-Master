@@ -40,8 +40,8 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /sheet_view | Display any player or NPC character sheet for the GM. |
 | /list_skills | Displays all skills possessed by your character, their Skill Level (SL), and their description.|
 | /master_list_skills| Displays all skills possessed by any character, their Skill Level (SL), and their description |
-| /list_magics | Displays all spells possessed by your character, their SL, their cost, and their description |
-| /master_list_magics | Displays all spells possessed by any character, their SL, their cost, and their description |
+| /list_spells | Displays all spells possessed by your character, their SL, their cost, and their description |
+| /master_list_spells | Displays all spells possessed by any character, their SL, their cost, and their description |
 
 ## Inventory Commands
 | Command | Description |
