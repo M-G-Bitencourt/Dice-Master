@@ -661,11 +661,12 @@ def get_character_skills_data(
             s.skill_id,
             s.name,
             s.attribute,
-            s.difficulty,
+            d.difficulty,
             s.description,
             cs.relative_level
         FROM character_skills cs
         JOIN skills s ON cs.skill_id = s.skill_id
+        LEFT JOIN difficulties d ON s.difficulty_id = d.difficulty_id
         WHERE cs.character_id = ?
         ORDER BY s.name COLLATE NOCASE ASC
         """,
@@ -768,7 +769,7 @@ def get_character_spells_data(
             m.spell_id,
             m.name,
             m.attribute,
-            m.difficulty,
+            d.difficulty,
             m.cost,
             m.resource,
             m.description,
@@ -777,6 +778,7 @@ def get_character_spells_data(
         FROM character_spells cm
         JOIN spells m ON cm.spell_id = m.spell_id
         LEFT JOIN spell_classes mc ON m.class = mc.spell_class_id
+        LEFT JOIN difficulties d ON m.difficulty_id = d.difficulty_id
         WHERE cm.character_id = ?
         ORDER BY mc.class COLLATE NOCASE ASC, m.name COLLATE NOCASE ASC
         """,
@@ -843,4 +845,91 @@ def get_character_spells_data(
         "character_id": character_id,
         "character_name": char_name,
         "spells": spells_list,
+    }
+
+
+def get_character_traits_data(
+    connection: sqlite3.Connection, character_id: int
+) -> dict | None:
+    """
+    Retrieves the complete list of registered advantages and disadvantages
+    for a character, along with the cost in character points and the
+    player-specific notes stored for each trait instance.
+    """
+    cursor = connection.cursor()
+
+    # 1. Fetch character name
+    cursor.execute(
+        "SELECT name FROM characters WHERE character_id = ?",
+        (character_id,),
+    )
+    char_row = cursor.fetchone()
+    if not char_row:
+        return None
+
+    char_name = char_row[0]
+
+    # 2. Fetch associated advantages joined with the global advantages catalogue
+    cursor.execute(
+        """
+        SELECT 
+            a.advantage_id,
+            a.name,
+            a.cost,
+            a.description,
+            ca.notes
+        FROM character_advantages ca
+        JOIN advantages a ON ca.advantage_id = a.advantage_id
+        WHERE ca.character_id = ?
+        ORDER BY a.name COLLATE NOCASE ASC
+        """,
+        (character_id,),
+    )
+    advantages_list = [
+        {
+            "trait_key": f"adv_{row[0]}",
+            "trait_id": row[0],
+            "category": "Vantagem",
+            "name": row[1],
+            "cost": row[2] if row[2] is not None else 0,
+            "description": row[3] or "Nenhuma descrição detalhada disponível.",
+            "notes": row[4] or "",
+        }
+        for row in cursor.fetchall()
+    ]
+
+    # 3. Fetch associated disadvantages joined with the global disadvantages catalogue
+    cursor.execute(
+        """
+        SELECT 
+            d.disadvantage_id,
+            d.name,
+            d.cost,
+            d.description,
+            cd.notes
+        FROM character_disadvantages cd
+        JOIN disadvantages d ON cd.disadvantage_id = d.disadvantage_id
+        WHERE cd.character_id = ?
+        ORDER BY d.name COLLATE NOCASE ASC
+        """,
+        (character_id,),
+    )
+    disadvantages_list = [
+        {
+            "trait_key": f"dis_{row[0]}",
+            "trait_id": row[0],
+            "category": "Desvantagem",
+            "name": row[1],
+            "cost": row[2] if row[2] is not None else 0,
+            "description": row[3] or "Nenhuma descrição detalhada disponível.",
+            "notes": row[4] or "",
+        }
+        for row in cursor.fetchall()
+    ]
+
+    return {
+        "character_id": character_id,
+        "character_name": char_name,
+        "advantages": advantages_list,
+        "disadvantages": disadvantages_list,
     }

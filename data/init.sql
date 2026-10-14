@@ -2,13 +2,23 @@ CREATE TABLE "additional_stats" (
     "id_additional_stat" INTEGER PRIMARY KEY AUTOINCREMENT,
     "stat" TEXT UNIQUE
 );
-CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE "difficulties" (
+    "difficulty_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+    "difficulty" TEXT NOT NULL UNIQUE
+);
+INSERT INTO "difficulties" ("difficulty_id", "difficulty") VALUES
+    (1, 'Easy'),
+    (2, 'Medium'),
+    (3, 'Hard'),
+    (4, 'Very Hard'),
+    (5, 'Ultra Hard');
 CREATE TABLE "skills" (
     "skill_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT,
     "attribute" TEXT,
-    "difficulty" TEXT,
-    "description" TEXT
+    "difficulty_id" INTEGER,
+    "description" TEXT,
+    FOREIGN KEY("difficulty_id") REFERENCES "difficulties"("difficulty_id")
 );
 CREATE TABLE "characters" (
     "character_id" INTEGER PRIMARY KEY,
@@ -195,10 +205,45 @@ CREATE TABLE "spells" (
 	"name"	TEXT,
 	"attribute"	TEXT,
 	"class"	INTEGER,
-	"difficulty"	TEXT,
+	"difficulty_id"	INTEGER,
 	"cost"	INTEGER,
 	"resource"	TEXT,
 	"description"	TEXT,
 	PRIMARY KEY("spell_id" AUTOINCREMENT),
-	FOREIGN KEY("class") REFERENCES "spell_classes"("spell_class_id")
+	FOREIGN KEY("class") REFERENCES "spell_classes"("spell_class_id"),
+	FOREIGN KEY("difficulty_id") REFERENCES "difficulties"("difficulty_id")
+);
+CREATE TABLE "advantages" (
+	"advantage_id"	INTEGER,
+	"name"	TEXT NOT NULL,
+	"cost"	INTEGER DEFAULT 0,
+	"description"	TEXT,
+	PRIMARY KEY("advantage_id" AUTOINCREMENT)
+);
+CREATE TABLE "disadvantages" (
+	"disadvantage_id"	INTEGER,
+	"name"	TEXT NOT NULL,
+	"cost"	INTEGER DEFAULT 0,
+	"description"	TEXT,
+	PRIMARY KEY("disadvantage_id" AUTOINCREMENT)
+);
+CREATE TABLE "character_advantages" (
+	"character_advantage_id"	INTEGER,
+	"character_id"	INTEGER NOT NULL,
+	"advantage_id"	INTEGER NOT NULL,
+	"notes"	TEXT,
+	UNIQUE("character_id","advantage_id"),
+	PRIMARY KEY("character_advantage_id" AUTOINCREMENT),
+	FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+	FOREIGN KEY("advantage_id") REFERENCES "advantages"("advantage_id") ON DELETE CASCADE
+);
+CREATE TABLE "character_disadvantages" (
+	"character_disadvantage_id"	INTEGER,
+	"character_id"	INTEGER NOT NULL,
+	"disadvantage_id"	INTEGER NOT NULL,
+	"notes"	TEXT,
+	UNIQUE("character_id","disadvantage_id"),
+	PRIMARY KEY("character_disadvantage_id" AUTOINCREMENT),
+	FOREIGN KEY("character_id") REFERENCES "characters"("character_id") ON DELETE CASCADE,
+	FOREIGN KEY("disadvantage_id") REFERENCES "disadvantages"("disadvantage_id") ON DELETE CASCADE
 );
