@@ -81,11 +81,13 @@ class SkillListView(discord.ui.View):
         character_name: str,
         skills: list[dict],
         author_id: int,
+        back_callback=None,
     ):
         super().__init__(timeout=180.0)
         self.character_name = character_name
         self.skills = skills
         self.author_id = author_id
+        self.back_callback = back_callback
         self.skills_by_id = {s["skill_id"]: s for s in skills}
         self.page_size = 25
         self.current_page = 0
@@ -121,7 +123,7 @@ class SkillListView(discord.ui.View):
 
         lines.append("---")
         lines.append("*Selecione uma perícia no menu abaixo para inspecionar seus detalhes.*")
-        return "\n".join(lines)
+        return "\n".join(lines)[:1900]
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
@@ -156,6 +158,18 @@ class SkillListView(discord.ui.View):
             )
             next_button.callback = self.next_page
             self.add_item(next_button)
+
+        if self.back_callback is not None:
+            back_button = discord.ui.Button(
+                label="Voltar",
+                style=discord.ButtonStyle.secondary,
+            )
+            back_button.callback = self.go_back
+            self.add_item(back_button)
+
+    async def go_back(self, interaction: discord.Interaction):
+        """Delegates navigation back to the parent view when configured."""
+        await self.back_callback(interaction)
 
     async def previous_page(self, interaction: discord.Interaction):
         """Moves view to the previous page."""

@@ -82,11 +82,13 @@ class SpellListView(discord.ui.View):
         character_name: str,
         spells: list[dict],
         author_id: int,
+        back_callback=None,
     ):
         super().__init__(timeout=180.0)
         self.character_name = character_name
         self.spells = spells
         self.author_id = author_id
+        self.back_callback = back_callback
         self.spells_by_id = {m["spell_id"]: m for m in spells}
         self.page_size = 25
         self.current_page = 0
@@ -128,7 +130,7 @@ class SpellListView(discord.ui.View):
 
         lines.append("---")
         lines.append("*Selecione uma magia no menu abaixo para inspecionar seus detalhes.*")
-        return "\n".join(lines)
+        return "\n".join(lines)[:1900]
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
@@ -163,6 +165,18 @@ class SpellListView(discord.ui.View):
             )
             next_button.callback = self.next_page
             self.add_item(next_button)
+
+        if self.back_callback is not None:
+            back_button = discord.ui.Button(
+                label="Voltar",
+                style=discord.ButtonStyle.secondary,
+            )
+            back_button.callback = self.go_back
+            self.add_item(back_button)
+
+    async def go_back(self, interaction: discord.Interaction):
+        """Delegates navigation back to the parent view when configured."""
+        await self.back_callback(interaction)
 
     async def previous_page(self, interaction: discord.Interaction):
         """Moves view to the previous page."""
