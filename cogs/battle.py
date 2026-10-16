@@ -9,6 +9,7 @@ from discord.ext import commands
 from utils.test_mechanics import quick_dispute
 from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
+from utils.ansi import code_block, resource_bar
 
 from utils.db_functions import *
 
@@ -642,6 +643,7 @@ class Battle(commands.Cog):
         st = character_data["st"]
         additional_max_pv = character_data["additional_max_pv"]
         current_hp = character_data["current_pv"]
+        max_pv = st + additional_max_pv
 
         # Morphological Topology Extraction (0=Normal, 1=Diffuse, 2=Homogeneous, 3=Unliving)
         body_type = character_data["normal_diffuse_homogeneous_unded"]
@@ -892,9 +894,9 @@ class Battle(commands.Cog):
             injury_status_msg = ""
 
             if amputation:
-                injury_status_msg = f"\n⚠️ **{location_name.upper()} AMPUTADO!**"
+                injury_status_msg = f"\n[AVISO] **{location_name.upper()} AMPUTADO!**"
             elif incapacitation:
-                injury_status_msg = f"\n⚠️ **{location_name.upper()} INCAPACITADO!**"
+                injury_status_msg = f"\n[AVISO] **{location_name.upper()} INCAPACITADO!**"
 
             if raw_injury > final_injury:
                 calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Atngiu o teto do {location_name})*"
@@ -917,13 +919,19 @@ class Battle(commands.Cog):
             )
             defense_embed.add_field(
                 name="Métricas Vitais do Personagem",
-                value=f"PV Anterior: `{current_hp}`\nPV Atual: `{new_hp}`",
+                value=(
+                    f"PV Anterior: `{current_hp}` -> PV Atual: `{new_hp}`\n"
+                    + code_block([resource_bar("PV", new_hp, max_pv)])
+                ),
                 inline=False,
             )
         else:
             defense_embed.add_field(
                 name="Métricas Vitais do Personagem",
-                value=f"Integridade totalmente preservada. Seu PV permanece estável em `{current_hp}`.",
+                value=(
+                    f"Integridade totalmente preservada. Seu PV permanece estável em `{current_hp}`.\n"
+                    + code_block([resource_bar("PV", current_hp, max_pv)])
+                ),
                 inline=False,
             )
 

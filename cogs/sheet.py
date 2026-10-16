@@ -10,6 +10,7 @@ from cogs.skills import SkillListView
 from cogs.spells import SpellListView
 from cogs.traits import TraitListView
 
+from utils.ansi import code_block, resource_bar
 from utils.db_functions import (
     get_character_inventory_data_by_id,
     get_character_profile,
@@ -71,10 +72,12 @@ def build_sheet_embed(character: dict) -> discord.Embed:
 
     sheet_embed.add_field(
         name="Recursos Atuais (PV - PF - ER)",
-        value=(
-            f"**PV:** `{character['current_pv']}`\n"
-            f"**PF:** `{character['current_pf']}`\n"
-            f"**ER:** `{character['current_er']}`"
+        value=code_block(
+            [
+                resource_bar("PV", int(character["current_pv"]), max_pv),
+                resource_bar("PF", int(character["current_pf"]), max_pf),
+                resource_bar("ER", int(character["current_er"]), base_er),
+            ]
         ),
         inline=False,
     )

@@ -11,6 +11,9 @@ INFO_COLOR = "1;38;2;121;192;255"
 WARN_COLOR = "1;38;2;242;204;96"
 NEUTRAL_COLOR = "1;38;2;230;237;243"
 
+BAR_FILLED = "#"
+BAR_EMPTY = "-"
+
 _ESCAPE_END = re.compile("\u001b\\[[0-9;]*m")
 
 
@@ -50,6 +53,47 @@ def truncate_visible(text: str, width: int) -> str:
 def pad(text: str, width: int) -> str:
     """Pads a possibly colored string with spaces based on its visible width."""
     return text + " " * max(0, width - visible_len(text))
+
+
+def severity_color(current: int, maximum: int) -> str:
+    """Maps a resource ratio to a severity color from the palette."""
+    if maximum <= 0:
+        return NEUTRAL_COLOR
+
+    ratio = current / maximum
+
+    if ratio >= 2 / 3:
+        return SUCCESS_COLOR
+    if ratio >= 1 / 3:
+        return WARN_COLOR
+    return DANGER_COLOR
+
+
+def bar_segments(current: int, maximum: int, width: int = 20) -> tuple[str, str]:
+    """Splits a resource bar into filled and empty ASCII segments."""
+    if maximum <= 0:
+        ratio = 0.0
+    else:
+        ratio = min(max(current / maximum, 0.0), 1.0)
+
+    filled = round(ratio * width)
+    return BAR_FILLED * filled, BAR_EMPTY * (width - filled)
+
+
+def resource_bar(label: str, current: int, maximum: int, width: int = 20) -> str:
+    """Builds a colored resource bar line with label and current/maximum values."""
+    filled, empty = bar_segments(current, maximum, width)
+    color = severity_color(current, maximum)
+    values = f"{current}/{maximum}"
+
+    colored_bar = ansi(filled, color) if filled else ""
+    colored_track = ansi(empty, NEUTRAL_COLOR) if empty else ""
+
+    return (
+        f"{ansi(label, LABEL_COLOR)} "
+        f"[{colored_bar}{colored_track}] "
+        f"{ansi(values, color)}"
+    )
 
 
 def clamp_code_block(value: str, limit: int) -> str:

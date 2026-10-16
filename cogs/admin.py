@@ -5,6 +5,7 @@ from discord.ext import commands
 from pathlib import Path
 
 
+from utils.ansi import code_block, resource_bar
 from utils.db_functions import set_character_resource
 from utils.db_functions import get_character_profile
 from utils.db_functions import get_character_thumbnail_by_id
@@ -156,6 +157,14 @@ class Admin(commands.Cog):
         # 5. UI Presentation Pipeline
         modifier_sign = "+" if value >= 0 else ""
 
+        max_pv = character_data["st"] + character_data["additional_max_pv"]
+        max_pf = character_data["ht"] + character_data["additional_max_pf"]
+        max_er = character_data["energy_reserve"]
+
+        pv_current = new_value if resource_key == "hp" else character_data["current_pv"]
+        pf_current = new_value if resource_key == "fp" else character_data["current_pf"]
+        er_current = new_value if resource_key == "er" else character_data["current_er"]
+
         transaction_embed = discord.Embed(
             title="Alteração do Mestre", color=discord.Color.purple()
         )
@@ -167,6 +176,18 @@ class Admin(commands.Cog):
                 f"Recurso Afetado: `{resource.name.upper()}`\n"
                 f"Modificador Aplicado: `{modifier_sign}{value}`\n"
                 f"Transição de Estado: `{current_value}` -> `{new_value}`"
+            ),
+            inline=False,
+        )
+
+        transaction_embed.add_field(
+            name="Estado Atual",
+            value=code_block(
+                [
+                    resource_bar("PV", int(pv_current), int(max_pv)),
+                    resource_bar("PF", int(pf_current), int(max_pf)),
+                    resource_bar("ER", int(er_current), int(max_er)),
+                ]
             ),
             inline=False,
         )
@@ -229,6 +250,18 @@ class Admin(commands.Cog):
                 f"**PV (Hit Points):** `{old_pv}` -> `{max_pv}`\n"
                 f"**PF (Fatigue Points):** `{old_pf}` -> `{max_pf}`\n"
                 f"**ER (Energy Reserve):** `{old_er}` -> `{max_er}`"
+            ),
+            inline=False,
+        )
+
+        restoration_embed.add_field(
+            name="Estado Restaurado",
+            value=code_block(
+                [
+                    resource_bar("PV", int(max_pv), int(max_pv)),
+                    resource_bar("PF", int(max_pf), int(max_pf)),
+                    resource_bar("ER", int(max_er), int(max_er)),
+                ]
             ),
             inline=False,
         )
@@ -349,7 +382,7 @@ class Admin(commands.Cog):
             target_character_id = int(character)
         except ValueError:
             await interaction.followup.send(
-                "❌ **Erro de processamento:** O identificador do personagem fornecido é inválido.",
+                "[ERRO] **Erro de processamento:** O identificador do personagem fornecido é inválido.",
                 ephemeral=True,
             )
             return
@@ -363,7 +396,7 @@ class Admin(commands.Cog):
 
         if row is None:
             await interaction.followup.send(
-                f"❌ **Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{target_character_id}`.",
+                f"[ERRO] **Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{target_character_id}`.",
                 ephemeral=True,
             )
             return
