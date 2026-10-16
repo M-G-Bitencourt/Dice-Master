@@ -10,6 +10,7 @@ from utils.db_functions import (
     get_character_spells_data,
 )
 
+
 class SpellSelect(discord.ui.Select):
     """Dropdown component for inspecting details of a specific character spell."""
 
@@ -55,15 +56,15 @@ class SpellSelect(discord.ui.Select):
             f"**Descrição e Regras:**\n"
         )
 
-        # The embed description allows up to 4096 characters
-        max_desc_len = 4096 - len(header)
+        # The embed description allows up to 4000 characters (vs 1000 in a field)
+        max_desc_len = 4000 - len(header)
         if len(desc_raw) > max_desc_len:
             desc_text = desc_raw[: max_desc_len - 3] + "..."
         else:
             desc_text = desc_raw
 
         embed = discord.Embed(
-            title=f"Magia: {selected_spell['name']}",
+            title=f"Magia: {selected_spell['name']}"[:256],
             description=header + desc_text,
             color=discord.Color.purple(),
         )
@@ -73,6 +74,7 @@ class SpellSelect(discord.ui.Select):
             embed=embed,
             view=view,
         )
+
 
 class SpellListView(discord.ui.View):
     """Interactive view managing the paginated compact spell list and dropdown."""
@@ -84,7 +86,7 @@ class SpellListView(discord.ui.View):
         author_id: int,
         back_callback=None,
     ):
-        super().__init__(timeout=180.0)
+        super().__init__(timeout=None)
         self.character_name = character_name
         self.spells = spells
         self.author_id = author_id
@@ -200,10 +202,6 @@ class SpellListView(discord.ui.View):
                 view=self,
             )
 
-    async def on_timeout(self):
-        """Disables interactive components when the view times out."""
-        for item in self.children:
-            item.disabled = True
 
 class Spells(commands.Cog):
     """Cog responsible for character spell management and inspection."""

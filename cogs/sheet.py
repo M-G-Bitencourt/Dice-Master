@@ -11,7 +11,7 @@ from cogs.spells import SpellListView
 from cogs.traits import TraitListView
 
 from utils.db_functions import (
-    get_character_inventory_data,
+    get_character_inventory_data_by_id,
     get_character_profile,
     get_character_profile_by_id,
     get_character_skills_data,
@@ -82,23 +82,41 @@ def build_sheet_embed(character: dict) -> discord.Embed:
     return sheet_embed
 
 
+def _attachment_kwargs(interaction: discord.Interaction, character_file) -> dict:
+    """Reuses an already attached portrait, uploading only when it is missing."""
+    if character_file is None:
+        return {"attachments": []}
+
+    message = interaction.message
+    existing_filenames = (
+        {attachment.filename for attachment in message.attachments}
+        if message
+        else set()
+    )
+
+    if character_file.filename in existing_filenames:
+        return {}
+
+    return {"attachments": [character_file]}
+
+
 class SheetHubView(discord.ui.View):
     """Interactive hub exposing the character sheet inspection modules."""
 
     def __init__(
         self,
         db_connection: sqlite3.Connection,
-        player_id: int,
         character_id: int,
         author_id: int,
         sheet_embed: discord.Embed,
+        strength: int | None = None,
     ):
-        super().__init__(timeout=180.0)
+        super().__init__(timeout=None)
         self.db_connection = db_connection
-        self.player_id = player_id
         self.character_id = character_id
         self.author_id = author_id
         self.sheet_embed = sheet_embed
+        self.strength = strength
 
         button_specs = [
             ("Inventário", self.open_inventory),
@@ -124,64 +142,77 @@ class SheetHubView(discord.ui.View):
 
     async def restore_hub(self, interaction: discord.Interaction):
         """Restores the central sheet embed replacing any child inspection view."""
-        character_file, _ = get_character_thumbnail_payload(
-            self.db_connection, self.player_id
+        await interaction.response.defer()
+
+        character_file, _ = get_character_thumbnail_by_id(
+            self.db_connection, self.character_id
         )
-        attachments = [character_file] if character_file is not None else []
 
         hub_view = SheetHubView(
             db_connection=self.db_connection,
-            player_id=self.player_id,
             character_id=self.character_id,
             author_id=self.author_id,
             sheet_embed=self.sheet_embed,
+            strength=self.strength,
         )
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None,
             embed=self.sheet_embed,
             view=hub_view,
-            attachments=attachments,
+            **_attachment_kwargs(interaction, character_file),
         )
 
     async def open_inventory(self, interaction: discord.Interaction):
         """Renders the sectioned inventory embeds on the hub message."""
-        data = get_character_inventory_data(self.db_connection, self.player_id)
+        await interaction.response.defer()
+
+        data = get_character_inventory_data_by_id(
+            self.db_connection, self.character_id
+        )
 
         if not data:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Erro de consistência: nenhum inventário associado ao personagem.",
                 ephemeral=True,
             )
             return
 
-        embeds = build_inventory_embeds(data)
+        embeds = build_inventory_embeds(data, self.strength)
         child_view = InventoryView(
-            embeds=embeds,
             author_id=self.author_id,
             back_callback=self.restore_hub,
         )
 
-        await interaction.response.edit_message(
+        character_file, thumbnail_url = get_character_thumbnail_by_id(
+            self.db_connection, self.character_id
+        )
+
+        if thumbnail_url:
+            embeds[0].set_thumbnail(url=thumbnail_url)
+
+        await interaction.edit_original_response(
             content=None,
             embeds=embeds,
             view=child_view,
-            attachments=[],
+            **_attachment_kwargs(interaction, character_file),
         )
 
     async def open_skills(self, interaction: discord.Interaction):
         """Renders the paginated skill list on the hub message."""
+        await interaction.response.defer()
+
         skills_data = get_character_skills_data(self.db_connection, self.character_id)
 
         if not skills_data:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
                 ephemeral=True,
             )
             return
 
         if not skills_data["skills"]:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"O personagem {skills_data['character_name']} não possui nenhuma perícia cadastrada.",
                 ephemeral=True,
             )
@@ -194,7 +225,7 @@ class SheetHubView(discord.ui.View):
             back_callback=self.restore_hub,
         )
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=child_view.build_content(),
             embed=None,
             view=child_view,
@@ -203,17 +234,19 @@ class SheetHubView(discord.ui.View):
 
     async def open_traits(self, interaction: discord.Interaction):
         """Renders the paginated trait list on the hub message."""
+        await interaction.response.defer()
+
         traits_data = get_character_traits_data(self.db_connection, self.character_id)
 
         if not traits_data:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
                 ephemeral=True,
             )
             return
 
         if not traits_data["advantages"] and not traits_data["disadvantages"]:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"O personagem {traits_data['character_name']} não possui nenhuma vantagem ou desvantagem cadastrada.",
                 ephemeral=True,
             )
@@ -226,7 +259,7 @@ class SheetHubView(discord.ui.View):
             back_callback=self.restore_hub,
         )
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=child_view.build_content(),
             embed=None,
             view=child_view,
@@ -235,17 +268,19 @@ class SheetHubView(discord.ui.View):
 
     async def open_spells(self, interaction: discord.Interaction):
         """Renders the paginated spell list on the hub message."""
+        await interaction.response.defer()
+
         spells_data = get_character_spells_data(self.db_connection, self.character_id)
 
         if not spells_data:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
                 ephemeral=True,
             )
             return
 
         if not spells_data["spells"]:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"O personagem {spells_data['character_name']} não possui nenhuma magia cadastrada.",
                 ephemeral=True,
             )
@@ -258,17 +293,12 @@ class SheetHubView(discord.ui.View):
             back_callback=self.restore_hub,
         )
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=child_view.build_content(),
             embed=None,
             view=child_view,
             attachments=[],
         )
-
-    async def on_timeout(self):
-        """Disables interactive components when the view times out."""
-        for item in self.children:
-            item.disabled = True
 
 
 class Sheet(commands.Cog):
@@ -346,16 +376,21 @@ class Sheet(commands.Cog):
 
         hub_view = SheetHubView(
             db_connection=self.db_connection,
-            player_id=player_id,
             character_id=character["character_id"],
             author_id=interaction.user.id,
             sheet_embed=sheet_embed,
+            strength=character["st"],
         )
 
         # Mandatory followup via webhook, transmitting the final embed with the hub
-        await interaction.followup.send(
-            embed=sheet_embed, file=character_file, view=hub_view, ephemeral=True
-        )
+        if character_file is not None:
+            await interaction.followup.send(
+                embed=sheet_embed, file=character_file, view=hub_view, ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                embed=sheet_embed, view=hub_view, ephemeral=True
+            )
 
     @app_commands.command(
         name="sheet_view",
@@ -398,13 +433,26 @@ class Sheet(commands.Cog):
         if thumbnail_url:
             sheet_view_embed.set_thumbnail(url=thumbnail_url)
 
+        hub_view = SheetHubView(
+            db_connection=self.db_connection,
+            character_id=target_character_id,
+            author_id=interaction.user.id,
+            sheet_embed=sheet_view_embed,
+            strength=character_data["st"],
+        )
+
         # Strict conditional dispatch protecting network payload against NoneType serialization
         if character_file is not None:
             await interaction.followup.send(
-                embed=sheet_view_embed, file=character_file, ephemeral=True
+                embed=sheet_view_embed,
+                file=character_file,
+                view=hub_view,
+                ephemeral=True,
             )
         else:
-            await interaction.followup.send(embed=sheet_view_embed, ephemeral=True)
+            await interaction.followup.send(
+                embed=sheet_view_embed, view=hub_view, ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -10,6 +10,7 @@ from utils.db_functions import (
     get_character_skills_data,
 )
 
+
 class SkillSelect(discord.ui.Select):
     """Dropdown component for inspecting details of a specific character skill."""
 
@@ -54,15 +55,15 @@ class SkillSelect(discord.ui.Select):
             f"**Descrição e Regras:**\n"
         )
 
-        # The embed description allows up to 4096 characters (vs 1024 in a field)
-        max_desc_len = 4096 - len(header)
+        # The embed description allows up to 4000 characters (vs 1000 in a field)
+        max_desc_len = 4000 - len(header)
         if len(desc_raw) > max_desc_len:
             desc_text = desc_raw[: max_desc_len - 3] + "..."
         else:
             desc_text = desc_raw
 
         embed = discord.Embed(
-            title=f"Perícia: {selected_skill['name']}",
+            title=f"Perícia: {selected_skill['name']}"[:256],
             description=header + desc_text,
             color=discord.Color.blue(),
         )
@@ -72,6 +73,7 @@ class SkillSelect(discord.ui.Select):
             embed=embed,
             view=view,
         )
+
 
 class SkillListView(discord.ui.View):
     """Interactive view managing the paginated compact skill list and dropdown."""
@@ -83,7 +85,7 @@ class SkillListView(discord.ui.View):
         author_id: int,
         back_callback=None,
     ):
-        super().__init__(timeout=180.0)
+        super().__init__(timeout=None)
         self.character_name = character_name
         self.skills = skills
         self.author_id = author_id
@@ -192,11 +194,6 @@ class SkillListView(discord.ui.View):
                 embed=None,
                 view=self,
             )
-
-    async def on_timeout(self):
-        """Disables interactive components when the view times out."""
-        for item in self.children:
-            item.disabled = True
 
 
 class Skills(commands.Cog):

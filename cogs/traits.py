@@ -10,6 +10,7 @@ from utils.db_functions import (
     get_character_traits_data,
 )
 
+
 class TraitSelect(discord.ui.Select):
     """Dropdown component for inspecting details of a specific character trait."""
 
@@ -56,8 +57,8 @@ class TraitSelect(discord.ui.Select):
             f"**Descrição e Regras:**\n"
         )
 
-        # The embed description allows up to 4096 characters
-        max_desc_len = 4096 - len(header)
+        # The embed description allows up to 4000 characters (vs 1000 in a field)
+        max_desc_len = 4000 - len(header)
         if len(desc_raw) > max_desc_len:
             desc_text = desc_raw[: max_desc_len - 3] + "..."
         else:
@@ -65,7 +66,7 @@ class TraitSelect(discord.ui.Select):
 
         is_advantage = selected_trait["category"] == "Vantagem"
         embed = discord.Embed(
-            title=f"{selected_trait['category']}: {selected_trait['name']}",
+            title=f"{selected_trait['category']}: {selected_trait['name']}"[:256],
             description=header + desc_text,
             color=discord.Color.gold() if is_advantage else discord.Color.dark_red(),
         )
@@ -75,6 +76,7 @@ class TraitSelect(discord.ui.Select):
             embed=embed,
             view=view,
         )
+
 
 class TraitListView(discord.ui.View):
     """Interactive view managing the paginated compact trait list and dropdown."""
@@ -86,7 +88,7 @@ class TraitListView(discord.ui.View):
         author_id: int,
         back_callback=None,
     ):
-        super().__init__(timeout=180.0)
+        super().__init__(timeout=None)
         self.character_name = character_name
         self.traits = traits
         self.author_id = author_id
@@ -204,10 +206,6 @@ class TraitListView(discord.ui.View):
                 view=self,
             )
 
-    async def on_timeout(self):
-        """Disables interactive components when the view times out."""
-        for item in self.children:
-            item.disabled = True
 
 class Traits(commands.Cog):
     """Cog responsible for character advantage and disadvantage inspection."""

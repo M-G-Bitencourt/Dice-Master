@@ -6,52 +6,106 @@ from discord.ext import commands
 
 from utils.db_functions import (
     get_character_inventory_data,
+    get_character_strength,
     get_character_thumbnail_by_id,
 )
 
 
-def _clamp_embed_description(lines: list[str]) -> str:
-    """Joins section lines and enforces Discord's embed description limit."""
-    text = "\n".join(lines)
-    if len(text) <= 4000:
-        return text
+def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int]:
+    """Calculates the GURPS 4e metric encumbrance level for the carried weight."""
+    basic_lift = (strength * strength) / 10.0
 
-    suffix = "\n... (exibição truncada)"
-    return text[: 4000 - len(suffix)] + suffix
+    thresholds = [
+        (basic_lift, "Nenhuma", 0),
+        (basic_lift * 2, "Leve", -1),
+        (basic_lift * 3, "Média", -2),
+        (basic_lift * 6, "Pesada", -3),
+        (basic_lift * 10, "Muito Pesada", -4),
+    ]
+
+    for limit, label, penalty in thresholds:
+        if total_weight <= limit:
+            return label, penalty
+
+    return "Muito Pesada", -4
 
 
 def _build_summary_embed(
-    data: dict, total_weight: float, equipped_count: int
+    data: dict,
+    total_weight: float,
+    equipped_count: int,
+    item_count: int,
+    strength: int | None,
 ) -> discord.Embed:
-    """Builds the inventory summary embed with money, weight and equipped count."""
-    return discord.Embed(
-        title=f"Inventário: {data['character_name']}",
-        description=(
-            f"**Dinheiro:** `$ {data['money']}`\n"
-            f"**Peso Total:** `{total_weight:.2f} kg`\n"
-            f"**Equipamentos Ativos:** `{equipped_count}`"
-        ),
+    """Builds the inventory summary embed with money, weight and encumbrance fields."""
+    summary_embed = discord.Embed(
+        title=f"Inventário: {data['character_name']}"[:256],
+        description="*Registro de equipamento e carga do personagem.*",
         color=discord.Color.gold(),
     )
 
+    summary_fields = [
+        ("Dinheiro", f"`$ {data['money']}`"),
+        ("Peso Total", f"`{total_weight:.2f} kg`"),
+        ("Equipados", f"`{equipped_count}`"),
+        ("Itens", f"`{item_count}`"),
+    ]
 
-def build_inventory_embeds(data: dict) -> list[discord.Embed]:
-    """Renders the complete inventory into a list of sectioned embeds."""
+    if strength is not None:
+        label, penalty = _encumbrance_level(total_weight, strength)
+        penalty_text = f" ({penalty})" if penalty else ""
+        summary_fields.append(("Carga", f"`{label}{penalty_text}`"))
+
+    for name, value in summary_fields:
+        summary_embed.add_field(name=name[:256], value=value[:1000], inline=True)
+
+    return summary_embed
+
+
+def _append_section(
+    embeds: list[discord.Embed],
+    title: str,
+    color: discord.Color,
+    fields: list[tuple[str, str]],
+    legend: str | None = None,
+) -> None:
+    """Appends one section as item-box embeds, chunking at 25 fields per embed."""
+    for index in range(0, len(fields), 25):
+        chunk = fields[index : index + 25]
+        section_embed = discord.Embed(
+            title=(title if index == 0 else f"{title} (continuação)")[:256],
+            color=color,
+        )
+
+        if legend and index == 0:
+            section_embed.description = legend[:4000]
+
+        for name, value in chunk:
+            section_embed.add_field(name=name[:256], value=value[:1000], inline=False)
+
+        embeds.append(section_embed)
+
+
+def build_inventory_embeds(
+    data: dict,
+    strength: int | None = None,
+) -> list[discord.Embed]:
+    """Renders the inventory into colored section embeds with one box per item."""
     total_weight = 0.0
     equipped_count = 0
 
-    melee_lines = []
+    melee_fields = []
+    melee_weight = 0.0
     for weapon in data["melee_weapons"]:
         badge = "[EQUIPADO]" if weapon["is_equipped"] else "[GUARDADO]"
         equipped_count += int(weapon["is_equipped"])
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
-        st_text = f" | ST Min `{weapon['min_st']}`" if weapon["min_st"] > 0 else ""
+        melee_weight += item_weight
 
-        melee_lines.append(
-            f"**{badge}** {weapon['name']} (x{weapon['quantity']}) - "
-            f"Peso `{item_weight:.2f} kg`{st_text}"
-        )
+        lines = [f"Peso: `{item_weight:.2f} kg`"]
+        if weapon["min_st"] > 0:
+            lines[0] += f" | ST Mín: `{weapon['min_st']}`"
 
         for mode in weapon["modes"]:
             dmg_sign = (
@@ -62,75 +116,125 @@ def build_inventory_embeds(data: dict) -> list[discord.Embed]:
             dmg_display = (
                 f"{mode['damage_base']}{dmg_sign} {mode['damage_type']}".strip()
             )
-            notes_display = f" | ({mode['notes']})" if mode["notes"] else ""
+            notes = f" ({mode['notes']})" if mode["notes"] else ""
 
-            melee_lines.append(
-                f"  - {mode['mode_name']}: Dano `{dmg_display}` | "
-                f"Alc `{mode['reach']}` | Ap `{mode['parry']}`{notes_display}"
+            lines.append(
+                f"- {mode['mode_name']}: `{dmg_display}` | "
+                f"Alc `{mode['reach']}` | Ap `{mode['parry']}`{notes}"
             )
 
-    ranged_lines = []
+        melee_fields.append(
+            (f"{badge} {weapon['name']} (x{weapon['quantity']})", "\n".join(lines))
+        )
+
+    ranged_fields = []
+    ranged_weight = 0.0
     for weapon in data["ranged_weapons"]:
         badge = "[EQUIPADO]" if weapon["is_equipped"] else "[GUARDADO]"
         equipped_count += int(weapon["is_equipped"])
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
+        ranged_weight += item_weight
 
-        ranged_lines.append(
-            f"**{badge}** {weapon['name']} (x{weapon['quantity']}) - "
-            f"Dano `{weapon['damage']}` | Acc `{weapon['acc']}` | "
+        value = (
+            f"Dano `{weapon['damage']}` | Acc `{weapon['acc']}`\n"
             f"Alcance `{weapon['range_half']}/{weapon['range_max']}` | "
-            f"Tiros `{weapon['shots']}` | Peso `{item_weight:.2f} kg`"
+            f"Tiros `{weapon['shots']}`\n"
+            f"Peso `{item_weight:.2f} kg`"
         )
 
-    armor_lines = []
+        ranged_fields.append(
+            (f"{badge} {weapon['name']} (x{weapon['quantity']})", value)
+        )
+
+    armor_fields = []
+    armor_weight = 0.0
+    has_flexible_armor = False
     for armor in data["armors"]:
         badge = "[EQUIPADO]" if armor["is_equipped"] else "[GUARDADO]"
         equipped_count += int(armor["is_equipped"])
-        dr_display = f"{armor['dr']}*" if armor["is_flexible"] else f"{armor['dr']}"
         item_weight = armor["weight"] * armor["quantity"]
         item_cost = armor["cost"] * armor["quantity"]
         total_weight += item_weight
+        armor_weight += item_weight
 
-        armor_lines.append(
-            f"**{badge}** {armor['name']} (x{armor['quantity']}) - "
-            f"RD `{dr_display}` | Local `{armor['location']}` | "
+        dr_display = f"{armor['dr']}*" if armor["is_flexible"] else f"{armor['dr']}"
+        has_flexible_armor = has_flexible_armor or bool(armor["is_flexible"])
+
+        value = (
+            f"RD `{dr_display}` | Local `{armor['location']}`\n"
             f"Peso `{item_weight:.2f} kg` | Valor `$ {item_cost:.2f}`"
         )
 
-    item_lines = []
-    for item in data["items"]:
-        desc_str = f" - ({item['description']})" if item["description"] else ""
-        item_weight = item["weight"] * item["quantity"]
-        total_weight += item_weight
-
-        item_lines.append(
-            f"- {item['name']} (x{item['quantity']}) - "
-            f"Peso `{item_weight:.2f} kg`{desc_str}"
+        armor_fields.append(
+            (f"{badge} {armor['name']} (x{armor['quantity']})", value)
         )
 
-    embeds = [_build_summary_embed(data, total_weight, equipped_count)]
+    item_fields = []
+    item_weight_total = 0.0
+    for item in data["items"]:
+        item_weight = item["weight"] * item["quantity"]
+        total_weight += item_weight
+        item_weight_total += item_weight
 
-    sections = [
-        ("Armas Corpo a Corpo", discord.Color.dark_red(), melee_lines),
-        ("Armas a Distância", discord.Color.dark_teal(), ranged_lines),
-        ("Armaduras", discord.Color.dark_blue(), armor_lines),
-        ("Itens Gerais", discord.Color.dark_grey(), item_lines),
-    ]
+        description = item["description"] or ""
+        desc_text = f"\n*{description}*" if description else ""
 
-    for title, color, lines in sections:
-        if not lines:
-            continue
-        embeds.append(
-            discord.Embed(
-                title=title,
-                description=_clamp_embed_description(lines),
-                color=color,
+        item_fields.append(
+            (
+                f"{item['name']} (x{item['quantity']})",
+                f"Peso `{item_weight:.2f} kg`{desc_text}",
             )
         )
 
-    if len(embeds) == 1:
-        embeds[0].description += "\n\n*Nenhum equipamento ou item registrado.*"
+    item_count = (
+        len(data["melee_weapons"])
+        + len(data["ranged_weapons"])
+        + len(data["armors"])
+        + len(data["items"])
+    )
+
+    embeds = [
+        _build_summary_embed(data, total_weight, equipped_count, item_count, strength)
+    ]
+
+    _append_section(
+        embeds,
+        f"Armas Corpo a Corpo [{len(melee_fields)}] - {melee_weight:.2f} kg",
+        discord.Color.dark_red(),
+        melee_fields,
+    )
+
+    _append_section(
+        embeds,
+        f"Armas a Distância [{len(ranged_fields)}] - {ranged_weight:.2f} kg",
+        discord.Color.dark_teal(),
+        ranged_fields,
+    )
+
+    armor_legend = "* RD flexível" if has_flexible_armor else None
+    _append_section(
+        embeds,
+        f"Armaduras [{len(armor_fields)}] - {armor_weight:.2f} kg",
+        discord.Color.dark_blue(),
+        armor_fields,
+        armor_legend,
+    )
+
+    _append_section(
+        embeds,
+        f"Itens Gerais [{len(item_fields)}] - {item_weight_total:.2f} kg",
+        discord.Color.dark_grey(),
+        item_fields,
+    )
+
+    if len(embeds) > 10:
+        embeds = embeds[:10]
+        note = "\n... (exibição truncada)"
+        embeds[-1].description = ((embeds[-1].description or "") + note)[:4000]
+
+    if item_count == 0:
+        embeds[0].description = "*Nenhum equipamento ou item registrado.*"
 
     return embeds
 
@@ -140,12 +244,10 @@ class InventoryView(discord.ui.View):
 
     def __init__(
         self,
-        embeds: list[discord.Embed],
         author_id: int,
         back_callback=None,
     ):
-        super().__init__(timeout=180.0)
-        self.embeds = embeds
+        super().__init__(timeout=None)
         self.author_id = author_id
         self.back_callback = back_callback
 
@@ -170,11 +272,6 @@ class InventoryView(discord.ui.View):
     async def go_back(self, interaction: discord.Interaction):
         """Delegates navigation back to the parent view when configured."""
         await self.back_callback(interaction)
-
-    async def on_timeout(self):
-        """Disables interactive components when the view times out."""
-        for item in self.children:
-            item.disabled = True
 
 
 class Inventory(commands.Cog):
@@ -312,10 +409,29 @@ class Inventory(commands.Cog):
             )
             return
 
-        embeds = build_inventory_embeds(data)
-        view = InventoryView(embeds=embeds, author_id=interaction.user.id)
+        try:
+            strength = get_character_strength(self.db_connection, interaction.user.id)
+        except ValueError:
+            strength = None
 
-        await interaction.followup.send(embeds=embeds, view=view, ephemeral=True)
+        embeds = build_inventory_embeds(data, strength)
+        view = InventoryView(author_id=interaction.user.id)
+
+        character_file, thumbnail_url = get_character_thumbnail_by_id(
+            self.db_connection, data["character_id"]
+        )
+
+        if thumbnail_url:
+            embeds[0].set_thumbnail(url=thumbnail_url)
+
+        if character_file is not None:
+            await interaction.followup.send(
+                embeds=embeds, file=character_file, view=view, ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                embeds=embeds, view=view, ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot):

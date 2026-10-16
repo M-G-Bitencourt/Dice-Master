@@ -388,17 +388,17 @@ def get_character_thumbnail_payload(
     return get_character_thumbnail_by_id(connection, character_id)
 
 
-def get_character_inventory_data(
-    connection: sqlite3.Connection, owner_id: int
+def get_character_inventory_data_by_id(
+    connection: sqlite3.Connection, character_id: int
 ) -> dict | None:
     """Fetches all equipped and stored melee weapons with attack modes, ranged weapons,
-    modular armors, and items for the active character assigned to the owner."""
+    modular armors, and items for the character identified by its primary key."""
     cursor = connection.cursor()
 
     # 1. Resolve character identity
     cursor.execute(
-        "SELECT character_id, name, money FROM characters WHERE owner_id = ?",
-        (owner_id,),
+        "SELECT character_id, name, money FROM characters WHERE character_id = ?",
+        (character_id,),
     )
     char_row = cursor.fetchone()
     if not char_row:
@@ -568,6 +568,23 @@ def get_character_inventory_data(
         "armors": armors,
         "items": items,
     }
+
+
+def get_character_inventory_data(
+    connection: sqlite3.Connection, owner_id: int
+) -> dict | None:
+    """Resolves the active character assigned to the owner and delegates the inventory
+    assembly to get_character_inventory_data_by_id."""
+    cursor = connection.cursor()
+    cursor.execute(
+        "SELECT character_id FROM characters WHERE owner_id = ?",
+        (owner_id,),
+    )
+    char_row = cursor.fetchone()
+    if not char_row:
+        return None
+
+    return get_character_inventory_data_by_id(connection, char_row[0])
 
 
 def modify_character_points(
