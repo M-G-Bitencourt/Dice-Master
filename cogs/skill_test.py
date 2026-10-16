@@ -39,20 +39,20 @@ class Skill_tests(commands.Cog):
 
         player_id = interaction.user.id
 
+        # Structural safeguard: Effective Skill Level cannot collapse below absolute zero
+        effective_sl = nh
+        if effective_sl < 0:
+            effective_sl = 0
+
         # Processing transient fate state from the persistence layer
         pending_fate = consume_deterministic_fate(player_id)
 
         if pending_fate is not None:
-            dices = hdm_dices(nh=nh, fate=pending_fate)
+            dices = hdm_dices(nh=effective_sl, fate=pending_fate)
         else:
             dices = [randint(1, 6) for _ in range(3)]
 
         dice_pool = sum(dices)
-        effective_sl = nh
-
-        # Structural safeguard: Effective Skill Level cannot collapse below absolute zero
-        if effective_sl < 0:
-            effective_sl = 0
 
         # Embed initialization and state engine flags
         test_embed = discord.Embed()

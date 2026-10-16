@@ -150,7 +150,7 @@ class Other_tests(commands.Cog):
 
         react_embed.add_field(
             name="Métricas da Rolagem",
-            value=f"`Dados: {dices} = {dice_pool}`\nModificador: `{modifier: +d}`\n\n**Resultado Final: {total_score}**",
+            value=f"`Dados: {dices} = {dice_pool}`\nModificador: `{modifier:+d}`\n\n**Resultado Final: {total_score}**",
             inline=False,
         )
 
@@ -268,7 +268,7 @@ class Other_tests(commands.Cog):
             if is_critical_failure:
                 panic_value = panic_dice_pool + failure_margin + 10
                 critical_notice = (
-                    "\n⚠️ **FALHA CRÍTICA: +10 adicionado ao resultado final!**"
+                    "\n**[FALHA CRÍTICA: +10 adicionado ao resultado final!]**"
                 )
             else:
                 panic_value = panic_dice_pool + failure_margin

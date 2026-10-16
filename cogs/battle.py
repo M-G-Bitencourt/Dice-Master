@@ -186,15 +186,17 @@ class Battle(commands.Cog):
 
         dmg_embed.title = "DANO"
         dmg_embed.color = discord.Color.brand_red()
-        dmg_embed.add_field(name="Força", value=st, inline=False)
+        dmg_embed.add_field(name="Força", value=str(st)[:1000], inline=False)
         dmg_embed.add_field(
             name="Tipo de Ataque",
-            value=f"{atk_type.name}\n{dice_count}d {signal} {abs(st_mod)}",
+            value=f"{atk_type.name}\n{dice_count}d {signal} {abs(st_mod)}"[:1000],
             inline=False,
         )
         dmg_embed.add_field(
             name="Resultado da Rolagem",
-            value=f"\n`Dados: {dices} = {dice_sum}`\nModificador de Força: {st_mod}\nModificador de Arma: {modificador}\n\n**Total:** {damage_value}",
+            value=f"\n`Dados: {dices} = {dice_sum}`\nModificador de Força: {st_mod}\nModificador de Arma: {modificador}\n\n**Total:** {damage_value}"[
+                :1000
+            ],
             inline=False,
         )
 
@@ -285,7 +287,11 @@ class Battle(commands.Cog):
         feint_raw = get_player_condition(self.db_connection, player_id, "feint")
         feint_value = feint_raw if feint_raw is not None else 0
 
-        st = get_character_strength(self.db_connection, player_id)
+        try:
+            st = get_character_strength(self.db_connection, player_id)
+        except ValueError as e:
+            await interaction.followup.send(f"Erro de processamento: {e}")
+            return
 
         # Mathematical correction: shock is a penalty and must be subtracted
         total_modifiers = local_difficulty + evaluate_modifier - shock
@@ -476,7 +482,11 @@ class Battle(commands.Cog):
         shock_raw = get_player_condition(self.db_connection, player_id, "shock")
         shock = shock_raw if shock_raw is not None else 0
 
-        st = get_character_strength(self.db_connection, player_id)
+        try:
+            st = get_character_strength(self.db_connection, player_id)
+        except ValueError as e:
+            await interaction.followup.send(f"Erro de processamento: {e}")
+            return
 
         # Tactical math correction: Shock is a penalty, it must be subtracted
         total_modifiers = local_difficulty + aim_modifier - shock
@@ -627,6 +637,13 @@ class Battle(commands.Cog):
 
         # Database state collection
         current_attack = get_current_attack(self.db_connection)
+
+        if not current_attack:
+            await interaction.followup.send(
+                "Nenhum ataque registrado para defender. Realize um ataque antes de usar este comando."
+            )
+            return
+
         dmg_type = current_attack["dmg_type"]
         hit_location = current_attack["hit_location"]
         feint = current_attack["feint"]
@@ -702,7 +719,7 @@ class Battle(commands.Cog):
             defense_embed.color = discord.Color.dark_red()
         elif is_opponent_critical:
             defense_embed.title = "ATAQUE CRÍTICO RECEBIDO"
-            defense_embed.description = "O oponente desferiu um acerto crítico. A defense é matematicamente impossível."
+            defense_embed.description = "O oponente desferiu um acerto crítico. A defesa é matematicamente impossível."
             defense_embed.color = discord.Color.magenta()
         else:
             pending_fate = consume_deterministic_fate(player_id)
@@ -899,7 +916,7 @@ class Battle(commands.Cog):
                 injury_status_msg = f"\n[AVISO] **{location_name.upper()} INCAPACITADO!**"
 
             if raw_injury > final_injury:
-                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Atngiu o teto do {location_name})*"
+                calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {raw_injury}` -> **`{final_injury} PV`** *(Atingiu o teto do {location_name})*"
             else:
                 calculation_string = f"`{penetrating_damage} x {local_damage_multiplier:.1f} = {final_injury} PV`"
 
@@ -1103,6 +1120,8 @@ class Battle(commands.Cog):
         name="apt", description="Aponta com uma arma de combate a distância"
     )
     async def aim(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+
         player_id = interaction.user.id
 
         # cleaning up the tables
@@ -1114,7 +1133,7 @@ class Battle(commands.Cog):
 
         set_player_condition(self.db_connection, player_id, "aim", aim_value)
 
-        await interaction.response.send_message(f"{aim_value}º Turno apontando.")
+        await interaction.followup.send(f"{aim_value}º Turno apontando.")
 
     # Avaliaar (evaluate command) -------------------------------------------
     @app_commands.command(
@@ -1122,6 +1141,8 @@ class Battle(commands.Cog):
         description="Estuda o oponente para conseguir um bônus na próxima rolagem",
     )
     async def evaluate(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+
         player_id = interaction.user.id
         #   cleaning up the tables
         set_player_condition(self.db_connection, player_id, "aim", 0)
@@ -1132,7 +1153,7 @@ class Battle(commands.Cog):
 
         set_player_condition(self.db_connection, player_id, "evaluate", evaluate_value)
 
-        await interaction.response.send_message(f"{evaluate_value}º Turno Avaliando.")
+        await interaction.followup.send(f"{evaluate_value}º Turno Avaliando.")
 
 
 async def setup(bot: commands.Bot):

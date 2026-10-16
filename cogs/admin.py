@@ -91,7 +91,7 @@ class Admin(commands.Cog):
 
         except sqlite3.Error as database_exception:
             await interact.response.send_message(
-                f"A structural database failure occurred: {database_exception}",
+                f"Erro de processamento: falha estrutural no banco de dados. {database_exception}",
                 ephemeral=True,
             )
             return
@@ -491,6 +491,22 @@ class Admin(commands.Cog):
         condition_column = condition.value
         cursor = self.db_connection.cursor()
 
+        # Existence validation to prevent foreign key integrity failures
+        cursor.execute(
+            "SELECT name FROM characters WHERE character_id = ?",
+            (target_character_id,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            await interaction.response.send_message(
+                "Erro de processamento: Personagem não encontrado.",
+                ephemeral=True,
+            )
+            return
+
+        target_character_name = row[0]
+
         # SQLite UPSERT structure to guarantee atomic existence and update
         # String interpolation is mathematically safe here due to strict Discord choice validation
         upsert_query = f"""
@@ -502,13 +518,6 @@ class Admin(commands.Cog):
 
         cursor.execute(upsert_query, (target_character_id, value))
         self.db_connection.commit()
-
-        # Ephemeral retrieval of the character's name for the UI validation
-        cursor.execute(
-            "SELECT name FROM characters WHERE character_id = ?", (target_character_id,)
-        )
-        row = cursor.fetchone()
-        target_character_name = row[0] if row else "Entidade Desconhecida"
 
         # UI Presentation Pipeline
         tactical_embed = discord.Embed(
@@ -549,6 +558,22 @@ class Admin(commands.Cog):
 
         cursor = self.db_connection.cursor()
 
+        # Existence validation to prevent foreign key integrity failures
+        cursor.execute(
+            "SELECT name FROM characters WHERE character_id = ?",
+            (target_character_id,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            await interaction.response.send_message(
+                "Erro de processamento: Personagem não encontrado.",
+                ephemeral=True,
+            )
+            return
+
+        target_character_name = row[0]
+
         # SQLite UPSERT structure to guarantee atomic existence and total zeroing of all conditions simultaneously
         upsert_query = """
             INSERT INTO next_turn_conditions (character_id, aim, evaluate, shock, feint)
@@ -563,13 +588,6 @@ class Admin(commands.Cog):
 
         cursor.execute(upsert_query, (target_character_id,))
         self.db_connection.commit()
-
-        # Ephemeral retrieval of the character's nomenclature for the UI validation
-        cursor.execute(
-            "SELECT name FROM characters WHERE character_id = ?", (target_character_id,)
-        )
-        row = cursor.fetchone()
-        target_character_name = row[0] if row else "Entidade Desconhecida"
 
         # UI Presentation Pipeline
         tactical_embed = discord.Embed(

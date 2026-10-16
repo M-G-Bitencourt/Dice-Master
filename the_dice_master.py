@@ -130,5 +130,6 @@ async def sync(ctx):
 
 
 # Run the Bot
-initialize_system_database()
-bot.run(config["BOT"]["Token"])
+if __name__ == "__main__":
+    initialize_system_database()
+    bot.run(config["BOT"]["Token"])
