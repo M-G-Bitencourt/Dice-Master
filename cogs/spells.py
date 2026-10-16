@@ -5,10 +5,54 @@ from pathlib import Path
 
 import sqlite3
 
+from utils.ansi import (
+    ACCENT_COLOR,
+    LABEL_COLOR,
+    NEUTRAL_COLOR,
+    SUCCESS_COLOR,
+    WARN_COLOR,
+    ansi,
+    clamp_code_block,
+    code_block,
+    pad,
+    paginate_rows,
+    sanitize,
+    truncate_visible,
+)
 from utils.db_functions import (
     _resolve_character_id,
     get_character_spells_data,
 )
+
+
+def build_spell_row(spell: dict) -> str:
+    """Builds one aligned ANSI row for the compact spell list."""
+    name = truncate_visible(spell["name"], 26)
+    nh_display = str(spell["nh"])
+    cost_display = f"{spell['cost']} {spell['resource']}"
+
+    return (
+        f"{ansi(pad(name, 26), NEUTRAL_COLOR)}  "
+        f"{ansi('NH', LABEL_COLOR)} {pad(ansi(nh_display, SUCCESS_COLOR), 5)} "
+        f"{ansi(cost_display, WARN_COLOR)}"
+    )
+
+
+def build_spell_header(spell: dict) -> str:
+    """Builds the colored metric header for a spell detail card."""
+    nh_display = str(spell["nh"])
+    cost_display = f"{spell['cost']} {spell['resource']}"
+    relative_display = spell["relative_display"]
+    difficulty_display = f"{spell['attribute']} / {spell['difficulty']}"
+
+    lines = [
+        f"{ansi('NH', LABEL_COLOR)} {ansi(nh_display, SUCCESS_COLOR)} | "
+        f"{ansi('Custo', LABEL_COLOR)} {ansi(cost_display, WARN_COLOR)}",
+        f"{ansi('Nível Relativo', LABEL_COLOR)} {ansi(relative_display, ACCENT_COLOR)} | "
+        f"{ansi('Dificuldade', LABEL_COLOR)} {ansi(difficulty_display, NEUTRAL_COLOR)}",
+    ]
+
+    return code_block(lines) + "\n**Descrição e Regras:**\n"
 
 
 class SpellSelect(discord.ui.Select):
@@ -48,13 +92,7 @@ class SpellSelect(discord.ui.Select):
         )
 
         # Header containing essential metrics at the top of the card
-        header = (
-            f"**NH:** `{selected_spell['nh']}` | "
-            f"**Custo:** `{selected_spell['cost']} {selected_spell['resource']}`\n"
-            f"**Nível Relativo:** `{selected_spell['relative_display']}` | "
-            f"**Dificuldade:** `{selected_spell['attribute']} / {selected_spell['difficulty']}`\n\n"
-            f"**Descrição e Regras:**\n"
-        )
+        header = build_spell_header(selected_spell)
 
         # The embed description allows up to 4000 characters (vs 1000 in a field)
         max_desc_len = 4000 - len(header)
@@ -92,9 +130,19 @@ class SpellListView(discord.ui.View):
         self.author_id = author_id
         self.back_callback = back_callback
         self.spells_by_id = {m["spell_id"]: m for m in spells}
-        self.page_size = 25
+
+        rows = []
+        current_school = None
+        for spell in spells:
+            school = spell.get("school", "Sem Escola")
+            if school != current_school:
+                current_school = school
+                rows.append((None, ansi(school, LABEL_COLOR)))
+            rows.append((spell, build_spell_row(spell)))
+
+        self.pages = paginate_rows(rows, base_length=300) or [[]]
         self.current_page = 0
-        self.total_pages = max(1, (len(spells) - 1) // self.page_size + 1)
+        self.total_pages = len(self.pages)
 
         self.update_components()
 
@@ -109,38 +157,32 @@ class SpellListView(discord.ui.View):
         return True
 
     def build_content(self) -> str:
-        """Renders the compact formatted Markdown list for the current page, grouped by school."""
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_spells = self.spells[start_idx:end_idx]
+        """Renders the colored ANSI list for the current page, grouped by school."""
+        page_rows = self.pages[self.current_page]
 
-        lines = [f"# Magias: **{self.character_name}**"]
+        lines = [f"# Magias: **{sanitize(self.character_name)}**"]
         if self.total_pages > 1:
             lines.append(f"*Página {self.current_page + 1} de {self.total_pages}*")
         lines.append("---")
 
-        current_school = None
-        for m in page_spells:
-            school = m.get("school", "Sem Escola")
-            if school != current_school:
-                lines.append(f"## {school}")
-                current_school = school
+        block_lines = [line for _, line in page_rows]
+        if page_rows and page_rows[0][0] is not None:
+            first_school = page_rows[0][0].get("school", "Sem Escola")
+            block_lines.insert(0, ansi(first_school, LABEL_COLOR))
 
-            lines.append(
-                f"- **{m['name']}** (NH `{m['nh']}`) | Custo `{m['cost']} {m['resource']}`"
-            )
-
+        lines.append(code_block(block_lines))
         lines.append("---")
         lines.append("*Selecione uma magia no menu abaixo para inspecionar seus detalhes.*")
-        return "\n".join(lines)[:1900]
+
+        return clamp_code_block("\n".join(lines), 1900)
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
         self.clear_items()
 
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_spells = self.spells[start_idx:end_idx]
+        page_spells = [
+            spell for spell, _ in self.pages[self.current_page] if spell is not None
+        ]
 
         self.add_item(SpellSelect(page_spells))
 

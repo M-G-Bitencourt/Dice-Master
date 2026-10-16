@@ -5,10 +5,47 @@ from pathlib import Path
 
 import sqlite3
 
+from utils.ansi import (
+    DANGER_COLOR,
+    LABEL_COLOR,
+    NEUTRAL_COLOR,
+    SUCCESS_COLOR,
+    ansi,
+    clamp_code_block,
+    code_block,
+    pad,
+    paginate_rows,
+    sanitize,
+    truncate_visible,
+)
 from utils.db_functions import (
     _resolve_character_id,
     get_character_traits_data,
 )
+
+
+def build_trait_row(trait: dict) -> str:
+    """Builds one aligned ANSI row for the compact trait list."""
+    name = truncate_visible(trait["name"], 30)
+    cost = int(trait["cost"])
+    cost_display = f"{cost:+d} pts"
+    cost_color = SUCCESS_COLOR if cost >= 0 else DANGER_COLOR
+
+    return (
+        f"{ansi(pad(name, 30), NEUTRAL_COLOR)}  "
+        f"{ansi(cost_display, cost_color)}"
+    )
+
+
+def build_trait_header(trait: dict) -> str:
+    """Builds the colored point cost header for a trait detail card."""
+    cost = int(trait["cost"])
+    cost_display = f"{cost:+d} pts"
+    cost_color = SUCCESS_COLOR if cost >= 0 else DANGER_COLOR
+
+    return code_block(
+        [f"{ansi('Custo', LABEL_COLOR)} {ansi(cost_display, cost_color)}"]
+    )
 
 
 class TraitSelect(discord.ui.Select):
@@ -52,9 +89,9 @@ class TraitSelect(discord.ui.Select):
 
         # Header containing essential point cost and per-character notes
         header = (
-            f"**Custo:** `{selected_trait['cost']} pts`\n"
-            f"**Observações:** {notes_text}\n\n"
-            f"**Descrição e Regras:**\n"
+            build_trait_header(selected_trait)
+            + f"\n**Observações:** {notes_text}\n\n"
+            + "**Descrição e Regras:**\n"
         )
 
         # The embed description allows up to 4000 characters (vs 1000 in a field)
@@ -94,9 +131,18 @@ class TraitListView(discord.ui.View):
         self.author_id = author_id
         self.back_callback = back_callback
         self.traits_by_key = {t["trait_key"]: t for t in traits}
-        self.page_size = 25
+
+        rows = []
+        current_category = None
+        for trait in traits:
+            if trait["category"] != current_category:
+                current_category = trait["category"]
+                rows.append((None, ansi(current_category.upper(), LABEL_COLOR)))
+            rows.append((trait, build_trait_row(trait)))
+
+        self.pages = paginate_rows(rows, base_length=300) or [[]]
         self.current_page = 0
-        self.total_pages = max(1, (len(traits) - 1) // self.page_size + 1)
+        self.total_pages = len(self.pages)
 
         self.update_components()
 
@@ -111,40 +157,33 @@ class TraitListView(discord.ui.View):
         return True
 
     def build_content(self) -> str:
-        """Renders the compact formatted Markdown list for the current page, grouped by category."""
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_traits = self.traits[start_idx:end_idx]
+        """Renders the colored ANSI list for the current page, grouped by category."""
+        page_rows = self.pages[self.current_page]
 
-        lines = [f"# Vantagens e Desvantagens: **{self.character_name}**"]
+        lines = [f"# Vantagens e Desvantagens: **{sanitize(self.character_name)}**"]
         if self.total_pages > 1:
             lines.append(f"*Página {self.current_page + 1} de {self.total_pages}*")
         lines.append("---")
 
-        page_advantages = [t for t in page_traits if t["category"] == "Vantagem"]
-        page_disadvantages = [t for t in page_traits if t["category"] == "Desvantagem"]
+        block_lines = [line for _, line in page_rows]
+        if page_rows and page_rows[0][0] is not None:
+            block_lines.insert(
+                0, ansi(page_rows[0][0]["category"].upper(), LABEL_COLOR)
+            )
 
-        if page_advantages:
-            lines.append("## Vantagens")
-            for t in page_advantages:
-                lines.append(f"- **{t['name']}** (Custo `{t['cost']} pts`)")
-
-        if page_disadvantages:
-            lines.append("## Desvantagens")
-            for t in page_disadvantages:
-                lines.append(f"- **{t['name']}** (Custo `{t['cost']} pts`)")
-
+        lines.append(code_block(block_lines))
         lines.append("---")
         lines.append("*Selecione uma característica no menu abaixo para inspecionar seus detalhes.*")
-        return "\n".join(lines)[:1900]
+
+        return clamp_code_block("\n".join(lines), 1900)
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
         self.clear_items()
 
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_traits = self.traits[start_idx:end_idx]
+        page_traits = [
+            trait for trait, _ in self.pages[self.current_page] if trait is not None
+        ]
 
         self.add_item(TraitSelect(page_traits))
 

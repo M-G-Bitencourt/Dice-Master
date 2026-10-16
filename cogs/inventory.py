@@ -1,57 +1,28 @@
-import re
 from pathlib import Path
 import sqlite3
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils.ansi import (
+    ACCENT_COLOR,
+    DANGER_COLOR,
+    INFO_COLOR,
+    LABEL_COLOR,
+    MODE_COLOR,
+    NEUTRAL_COLOR,
+    SUCCESS_COLOR,
+    WARN_COLOR,
+    ansi,
+    clamp_code_block,
+    code_block,
+    sanitize,
+)
 from utils.db_functions import (
     get_character_inventory_data,
     get_character_strength,
     get_character_thumbnail_by_id,
 )
-
-ANSI_RESET = "\u001b[0m"
-_ESCAPE_END = re.compile("\u001b\\[[0-9;]*m")
-
-LABEL_COLOR = "1;38;2;255;200;87"
-MODE_COLOR = "1;38;2;230;237;243"
-EQUIPPED_COLOR = "1;38;2;126;231;135"
-DAMAGE_COLOR = "1;38;2;255;123;114"
-DR_COLOR = "1;38;2;121;192;255"
-WEIGHT_COLOR = "1;38;2;86;212;221"
-MONEY_COLOR = "1;38;2;126;231;135"
-DEFAULT_COLOR = "1;38;2;230;237;243"
-
-
-def _sanitize(text: str) -> str:
-    """Replaces backticks so dynamic text can never break the ansi fence."""
-    return text.replace("`", "'")
-
-
-def _ansi(text: str, code: str) -> str:
-    """Wraps a fence-sanitized text fragment in an ANSI SGR color sequence."""
-    return f"\u001b[{code}m{_sanitize(text)}{ANSI_RESET}"
-
-
-def _clamp_field_value(value: str) -> str:
-    """Clamps a field value while preserving the ANSI code block closure."""
-    if len(value) <= 1000:
-        return value
-
-    suffix = f"{ANSI_RESET}\n```"
-    cut = value[: 1000 - len(suffix)]
-    matches = list(_ESCAPE_END.finditer(cut))
-
-    if matches:
-        cut = cut[: matches[-1].end()]
-
-    return cut + suffix
-
-
-def _code_block(lines: list[str]) -> str:
-    """Builds a fenced ANSI code block from pre-colored lines."""
-    return "```ansi\n" + "\n".join(lines) + "\n```"
 
 
 def _badge_label(is_equipped: bool) -> str:
@@ -61,9 +32,9 @@ def _badge_label(is_equipped: bool) -> str:
     return "[GUARDADO]"
 
 
-def _stat(label: str, value: str, value_color: str = DEFAULT_COLOR) -> str:
+def _stat(label: str, value: str, value_color: str = NEUTRAL_COLOR) -> str:
     """Renders a colored label/value pair inside a code block."""
-    return f"{_ansi(label, LABEL_COLOR)} {_ansi(value, value_color)}"
+    return f"{ansi(label, LABEL_COLOR)} {ansi(value, value_color)}"
 
 
 def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int, str]:
@@ -71,18 +42,18 @@ def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int, st
     basic_lift = (strength * strength) / 10.0
 
     thresholds = [
-        (basic_lift, "Nenhuma", 0, "1;38;2;126;231;135"),
-        (basic_lift * 2, "Leve", -1, "1;38;2;242;204;96"),
-        (basic_lift * 3, "Média", -2, "1;38;2;255;123;114"),
-        (basic_lift * 6, "Pesada", -3, "1;38;2;255;123;114"),
-        (basic_lift * 10, "Muito Pesada", -4, "1;38;2;255;123;114"),
+        (basic_lift, "Nenhuma", 0, SUCCESS_COLOR),
+        (basic_lift * 2, "Leve", -1, WARN_COLOR),
+        (basic_lift * 3, "Média", -2, DANGER_COLOR),
+        (basic_lift * 6, "Pesada", -3, DANGER_COLOR),
+        (basic_lift * 10, "Muito Pesada", -4, DANGER_COLOR),
     ]
 
     for limit, label, penalty, color in thresholds:
         if total_weight <= limit:
             return label, penalty, color
 
-    return "Muito Pesada", -4, "1;38;2;255;123;114"
+    return "Muito Pesada", -4, DANGER_COLOR
 
 
 def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
@@ -96,14 +67,14 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
 
-        header = _stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)
+        header = _stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)
         if weapon["min_st"] > 0:
             header += f"  {_stat('ST Mín', str(weapon['min_st']))}"
 
         lines = [header]
         for index, mode in enumerate(weapon["modes"]):
             if index > 0:
-                lines.append(_ansi("-" * 40, DEFAULT_COLOR))
+                lines.append(ansi("-" * 40, NEUTRAL_COLOR))
 
             dmg_sign = (
                 f"{mode['damage_modifier']:+d}"
@@ -114,23 +85,23 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
                 f"{mode['damage_base']}{dmg_sign} {mode['damage_type']}".strip()
             )
             notes = (
-                f" {_ansi('(' + mode['notes'] + ')', DEFAULT_COLOR)}"
+                f" {ansi('(' + mode['notes'] + ')', NEUTRAL_COLOR)}"
                 if mode["notes"]
                 else ""
             )
 
             lines.append(
-                f"{_ansi(mode['mode_name'] + ':', MODE_COLOR)} "
-                f"{_ansi(dmg_display, DAMAGE_COLOR)} | "
-                f"{_ansi('Alc', LABEL_COLOR)} {_sanitize(mode['reach'])} | "
-                f"{_ansi('Ap', LABEL_COLOR)} {_sanitize(mode['parry'])}{notes}"
+                f"{ansi(mode['mode_name'] + ':', MODE_COLOR)} "
+                f"{ansi(dmg_display, DANGER_COLOR)} | "
+                f"{ansi('Alc', LABEL_COLOR)} {sanitize(mode['reach'])} | "
+                f"{ansi('Ap', LABEL_COLOR)} {sanitize(mode['parry'])}{notes}"
             )
 
         fields.append(
             (
                 f"{_badge_label(weapon['is_equipped'])} "
                 f"{weapon['name']} (x{weapon['quantity']})",
-                _code_block(lines),
+                code_block(lines),
             )
         )
 
@@ -151,8 +122,8 @@ def _build_ranged_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]
         range_display = f"{weapon['range_half']}/{weapon['range_max']}"
 
         lines = [
-            _stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR),
-            f"{_stat('Dano', weapon['damage'], DAMAGE_COLOR)} | {_stat('Precisão', str(weapon['acc']))}",
+            _stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR),
+            f"{_stat('Dano', weapon['damage'], DANGER_COLOR)} | {_stat('Precisão', str(weapon['acc']))}",
             f"{_stat('Alcance', range_display)} | {_stat('Tiros', str(weapon['shots']))}",
         ]
 
@@ -160,7 +131,7 @@ def _build_ranged_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]
             (
                 f"{_badge_label(weapon['is_equipped'])} "
                 f"{weapon['name']} (x{weapon['quantity']})",
-                _code_block(lines),
+                code_block(lines),
             )
         )
 
@@ -186,16 +157,16 @@ def _build_armor_fields(
         dr_display = f"{armor['dr']}*" if armor["is_flexible"] else f"{armor['dr']}"
 
         lines = [
-            f"{_stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)} | "
-            f"{_stat('Valor', f'$ {item_cost:.2f}', MONEY_COLOR)}",
-            f"{_stat('RD', dr_display, DR_COLOR)} | {_stat('Local', armor['location'])}",
+            f"{_stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
+            f"{_stat('Valor', f'$ {item_cost:.2f}', SUCCESS_COLOR)}",
+            f"{_stat('RD', dr_display, INFO_COLOR)} | {_stat('Local', armor['location'])}",
         ]
 
         fields.append(
             (
                 f"{_badge_label(armor['is_equipped'])} "
                 f"{armor['name']} (x{armor['quantity']})",
-                _code_block(lines),
+                code_block(lines),
             )
         )
 
@@ -214,13 +185,13 @@ def _build_item_fields(data: dict) -> tuple[list[tuple[str, str]], float]:
         quantity_display = str(item["quantity"])
 
         lines = [
-            f"{_stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)} | "
+            f"{_stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
             f"{_stat('Qtd', f'x{quantity_display}')}"
         ]
         if item["description"]:
-            lines.append(_ansi(item["description"], DEFAULT_COLOR))
+            lines.append(ansi(item["description"], NEUTRAL_COLOR))
 
-        fields.append((f"{item['name']}", _code_block(lines)))
+        fields.append((f"{item['name']}", code_block(lines)))
 
     return fields, total_weight
 
@@ -239,14 +210,14 @@ def _build_summary_page(
         description = "*Registro de equipamento e carga do personagem.*"
 
     fields = [
-        ("Dinheiro", _code_block([_ansi(f"$ {data['money']}", MONEY_COLOR)]), True),
+        ("Dinheiro", code_block([ansi(f"$ {data['money']}", SUCCESS_COLOR)]), True),
         (
             "Peso Total",
-            _code_block([_ansi(f"{total_weight:.2f} kg", WEIGHT_COLOR)]),
+            code_block([ansi(f"{total_weight:.2f} kg", ACCENT_COLOR)]),
             True,
         ),
-        ("Equipados", _code_block([_ansi(str(equipped_count), EQUIPPED_COLOR)]), True),
-        ("Itens", _code_block([_ansi(str(item_count), DEFAULT_COLOR)]), True),
+        ("Equipados", code_block([ansi(str(equipped_count), SUCCESS_COLOR)]), True),
+        ("Itens", code_block([ansi(str(item_count), NEUTRAL_COLOR)]), True),
     ]
 
     if strength is not None:
@@ -255,7 +226,7 @@ def _build_summary_page(
         fields.append(
             (
                 "Carga",
-                _code_block([_ansi(f"{label}{penalty_text}", color)]),
+                code_block([ansi(f"{label}{penalty_text}", color)]),
                 True,
             )
         )
@@ -442,7 +413,7 @@ class InventoryView(discord.ui.View):
         for name, value, inline in page["fields"]:
             embed.add_field(
                 name=name[:256],
-                value=_clamp_field_value(value),
+                value=clamp_code_block(value, 1000),
                 inline=inline,
             )
 
@@ -652,6 +623,6 @@ class Inventory(commands.Cog):
             )
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: commands.Bot) -> None:
     """Mandatory asynchronous entry point to load the extension."""
     await bot.add_cog(Inventory(bot))

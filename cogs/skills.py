@@ -5,10 +5,51 @@ from pathlib import Path
 
 import sqlite3
 
+from utils.ansi import (
+    ACCENT_COLOR,
+    LABEL_COLOR,
+    NEUTRAL_COLOR,
+    SUCCESS_COLOR,
+    ansi,
+    clamp_code_block,
+    code_block,
+    pad,
+    paginate_rows,
+    sanitize,
+    truncate_visible,
+)
 from utils.db_functions import (
     _resolve_character_id,
     get_character_skills_data,
 )
+
+
+def build_skill_row(skill: dict) -> str:
+    """Builds one aligned ANSI row for the compact skill list."""
+    name = truncate_visible(skill["name"], 30)
+    relative_display = skill["relative_display"]
+    nh_display = str(skill["nh"])
+
+    return (
+        f"{ansi(pad(name, 30), NEUTRAL_COLOR)}  "
+        f"{pad(ansi(relative_display, ACCENT_COLOR), 7)} "
+        f"{ansi('NH', LABEL_COLOR)} {ansi(nh_display, SUCCESS_COLOR)}"
+    )
+
+
+def build_skill_header(skill: dict) -> str:
+    """Builds the colored metric header for a skill detail card."""
+    nh_display = str(skill["nh"])
+    relative_display = skill["relative_display"]
+    difficulty_display = f"{skill['attribute']} / {skill['difficulty']}"
+
+    lines = [
+        f"{ansi('NH', LABEL_COLOR)} {ansi(nh_display, SUCCESS_COLOR)} | "
+        f"{ansi('Nível Relativo', LABEL_COLOR)} {ansi(relative_display, ACCENT_COLOR)} | "
+        f"{ansi('Dificuldade', LABEL_COLOR)} {ansi(difficulty_display, NEUTRAL_COLOR)}"
+    ]
+
+    return code_block(lines) + "\n**Descrição e Regras:**\n"
 
 
 class SkillSelect(discord.ui.Select):
@@ -48,12 +89,7 @@ class SkillSelect(discord.ui.Select):
         )
 
         # Header containing essential combat metrics at the top of the card
-        header = (
-            f"**NH:** `{selected_skill['nh']}` | "
-            f"**Nível Relativo:** `{selected_skill['relative_display']}` | "
-            f"**Dificuldade:** `{selected_skill['attribute']} / {selected_skill['difficulty']}`\n\n"
-            f"**Descrição e Regras:**\n"
-        )
+        header = build_skill_header(selected_skill)
 
         # The embed description allows up to 4000 characters (vs 1000 in a field)
         max_desc_len = 4000 - len(header)
@@ -91,9 +127,11 @@ class SkillListView(discord.ui.View):
         self.author_id = author_id
         self.back_callback = back_callback
         self.skills_by_id = {s["skill_id"]: s for s in skills}
-        self.page_size = 25
+
+        rows = [(skill, build_skill_row(skill)) for skill in skills]
+        self.pages = paginate_rows(rows, base_length=300) or [[]]
         self.current_page = 0
-        self.total_pages = max(1, (len(skills) - 1) // self.page_size + 1)
+        self.total_pages = len(self.pages)
 
         self.update_components()
 
@@ -108,32 +146,26 @@ class SkillListView(discord.ui.View):
         return True
 
     def build_content(self) -> str:
-        """Renders the compact formatted Markdown list for the current page."""
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_skills = self.skills[start_idx:end_idx]
+        """Renders the colored ANSI list for the current page."""
+        page_rows = self.pages[self.current_page]
 
-        lines = [f"# Perícias: **{self.character_name}**"]
+        lines = [f"# Perícias: **{sanitize(self.character_name)}**"]
         if self.total_pages > 1:
             lines.append(f"*Página {self.current_page + 1} de {self.total_pages}*")
         lines.append("---")
-
-        for s in page_skills:
-            lines.append(
-                f"- **{s['name']}** (`{s['relative_display']}`) | **NH `{s['nh']}`**"
-            )
-
+        lines.append(code_block([line for _, line in page_rows]))
         lines.append("---")
         lines.append("*Selecione uma perícia no menu abaixo para inspecionar seus detalhes.*")
-        return "\n".join(lines)[:1900]
+
+        return clamp_code_block("\n".join(lines), 1900)
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
         self.clear_items()
 
-        start_idx = self.current_page * self.page_size
-        end_idx = start_idx + self.page_size
-        page_skills = self.skills[start_idx:end_idx]
+        page_skills = [
+            skill for skill, _ in self.pages[self.current_page] if skill is not None
+        ]
 
         self.add_item(SkillSelect(page_skills))
 
