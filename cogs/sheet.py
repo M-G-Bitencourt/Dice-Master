@@ -5,7 +5,7 @@ from pathlib import Path
 
 import sqlite3
 
-from cogs.inventory import InventoryView, build_inventory_embeds
+from cogs.inventory import InventoryView, build_inventory_pages
 from cogs.skills import SkillListView
 from cogs.spells import SpellListView
 from cogs.traits import TraitListView
@@ -164,7 +164,7 @@ class SheetHubView(discord.ui.View):
         )
 
     async def open_inventory(self, interaction: discord.Interaction):
-        """Renders the sectioned inventory embeds on the hub message."""
+        """Renders the paginated inventory pages on the hub message."""
         await interaction.response.defer()
 
         data = get_character_inventory_data_by_id(
@@ -178,22 +178,22 @@ class SheetHubView(discord.ui.View):
             )
             return
 
-        embeds = build_inventory_embeds(data, self.strength)
-        child_view = InventoryView(
-            author_id=self.author_id,
-            back_callback=self.restore_hub,
-        )
+        pages = build_inventory_pages(data, self.strength)
 
         character_file, thumbnail_url = get_character_thumbnail_by_id(
             self.db_connection, self.character_id
         )
 
-        if thumbnail_url:
-            embeds[0].set_thumbnail(url=thumbnail_url)
+        child_view = InventoryView(
+            pages=pages,
+            author_id=self.author_id,
+            thumbnail_url=thumbnail_url,
+            back_callback=self.restore_hub,
+        )
 
         await interaction.edit_original_response(
             content=None,
-            embeds=embeds,
+            embed=child_view.build_embed(),
             view=child_view,
             **_attachment_kwargs(interaction, character_file),
         )

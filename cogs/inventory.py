@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import sqlite3
 import discord
@@ -10,104 +11,100 @@ from utils.db_functions import (
     get_character_thumbnail_by_id,
 )
 
+ANSI_RESET = "\u001b[0m"
+_ESCAPE_END = re.compile("\u001b\\[[0-9;]*m")
 
-def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int]:
+LABEL_COLOR = "1;38;2;255;200;87"
+MODE_COLOR = "1;38;2;230;237;243"
+EQUIPPED_COLOR = "1;38;2;126;231;135"
+DAMAGE_COLOR = "1;38;2;255;123;114"
+DR_COLOR = "1;38;2;121;192;255"
+WEIGHT_COLOR = "1;38;2;86;212;221"
+MONEY_COLOR = "1;38;2;126;231;135"
+DEFAULT_COLOR = "1;38;2;230;237;243"
+
+
+def _sanitize(text: str) -> str:
+    """Replaces backticks so dynamic text can never break the ansi fence."""
+    return text.replace("`", "'")
+
+
+def _ansi(text: str, code: str) -> str:
+    """Wraps a fence-sanitized text fragment in an ANSI SGR color sequence."""
+    return f"\u001b[{code}m{_sanitize(text)}{ANSI_RESET}"
+
+
+def _clamp_field_value(value: str) -> str:
+    """Clamps a field value while preserving the ANSI code block closure."""
+    if len(value) <= 1000:
+        return value
+
+    suffix = f"{ANSI_RESET}\n```"
+    cut = value[: 1000 - len(suffix)]
+    matches = list(_ESCAPE_END.finditer(cut))
+
+    if matches:
+        cut = cut[: matches[-1].end()]
+
+    return cut + suffix
+
+
+def _code_block(lines: list[str]) -> str:
+    """Builds a fenced ANSI code block from pre-colored lines."""
+    return "```ansi\n" + "\n".join(lines) + "\n```"
+
+
+def _badge_label(is_equipped: bool) -> str:
+    """Renders the plain ASCII equipment status badge for field names."""
+    if is_equipped:
+        return "[EQUIPADO]"
+    return "[GUARDADO]"
+
+
+def _stat(label: str, value: str, value_color: str = DEFAULT_COLOR) -> str:
+    """Renders a colored label/value pair inside a code block."""
+    return f"{_ansi(label, LABEL_COLOR)} {_ansi(value, value_color)}"
+
+
+def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int, str]:
     """Calculates the GURPS 4e metric encumbrance level for the carried weight."""
     basic_lift = (strength * strength) / 10.0
 
     thresholds = [
-        (basic_lift, "Nenhuma", 0),
-        (basic_lift * 2, "Leve", -1),
-        (basic_lift * 3, "Média", -2),
-        (basic_lift * 6, "Pesada", -3),
-        (basic_lift * 10, "Muito Pesada", -4),
+        (basic_lift, "Nenhuma", 0, "1;38;2;126;231;135"),
+        (basic_lift * 2, "Leve", -1, "1;38;2;242;204;96"),
+        (basic_lift * 3, "Média", -2, "1;38;2;255;123;114"),
+        (basic_lift * 6, "Pesada", -3, "1;38;2;255;123;114"),
+        (basic_lift * 10, "Muito Pesada", -4, "1;38;2;255;123;114"),
     ]
 
-    for limit, label, penalty in thresholds:
+    for limit, label, penalty, color in thresholds:
         if total_weight <= limit:
-            return label, penalty
+            return label, penalty, color
 
-    return "Muito Pesada", -4
-
-
-def _build_summary_embed(
-    data: dict,
-    total_weight: float,
-    equipped_count: int,
-    item_count: int,
-    strength: int | None,
-) -> discord.Embed:
-    """Builds the inventory summary embed with money, weight and encumbrance fields."""
-    summary_embed = discord.Embed(
-        title=f"Inventário: {data['character_name']}"[:256],
-        description="*Registro de equipamento e carga do personagem.*",
-        color=discord.Color.gold(),
-    )
-
-    summary_fields = [
-        ("Dinheiro", f"`$ {data['money']}`"),
-        ("Peso Total", f"`{total_weight:.2f} kg`"),
-        ("Equipados", f"`{equipped_count}`"),
-        ("Itens", f"`{item_count}`"),
-    ]
-
-    if strength is not None:
-        label, penalty = _encumbrance_level(total_weight, strength)
-        penalty_text = f" ({penalty})" if penalty else ""
-        summary_fields.append(("Carga", f"`{label}{penalty_text}`"))
-
-    for name, value in summary_fields:
-        summary_embed.add_field(name=name[:256], value=value[:1000], inline=True)
-
-    return summary_embed
+    return "Muito Pesada", -4, "1;38;2;255;123;114"
 
 
-def _append_section(
-    embeds: list[discord.Embed],
-    title: str,
-    color: discord.Color,
-    fields: list[tuple[str, str]],
-    legend: str | None = None,
-) -> None:
-    """Appends one section as item-box embeds, chunking at 25 fields per embed."""
-    for index in range(0, len(fields), 25):
-        chunk = fields[index : index + 25]
-        section_embed = discord.Embed(
-            title=(title if index == 0 else f"{title} (continuação)")[:256],
-            color=color,
-        )
-
-        if legend and index == 0:
-            section_embed.description = legend[:4000]
-
-        for name, value in chunk:
-            section_embed.add_field(name=name[:256], value=value[:1000], inline=False)
-
-        embeds.append(section_embed)
-
-
-def build_inventory_embeds(
-    data: dict,
-    strength: int | None = None,
-) -> list[discord.Embed]:
-    """Renders the inventory into colored section embeds with one box per item."""
+def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
+    """Builds the melee weapon fields with attack mode sub-lines."""
+    fields = []
     total_weight = 0.0
     equipped_count = 0
 
-    melee_fields = []
-    melee_weight = 0.0
     for weapon in data["melee_weapons"]:
-        badge = "[EQUIPADO]" if weapon["is_equipped"] else "[GUARDADO]"
         equipped_count += int(weapon["is_equipped"])
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
-        melee_weight += item_weight
 
-        lines = [f"Peso: `{item_weight:.2f} kg`"]
+        header = _stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)
         if weapon["min_st"] > 0:
-            lines[0] += f" | ST Mín: `{weapon['min_st']}`"
+            header += f"  {_stat('ST Mín', str(weapon['min_st']))}"
 
-        for mode in weapon["modes"]:
+        lines = [header]
+        for index, mode in enumerate(weapon["modes"]):
+            if index > 0:
+                lines.append(_ansi("-" * 40, DEFAULT_COLOR))
+
             dmg_sign = (
                 f"{mode['damage_modifier']:+d}"
                 if mode["damage_modifier"] != 0
@@ -116,140 +113,304 @@ def build_inventory_embeds(
             dmg_display = (
                 f"{mode['damage_base']}{dmg_sign} {mode['damage_type']}".strip()
             )
-            notes = f" ({mode['notes']})" if mode["notes"] else ""
-
-            lines.append(
-                f"- {mode['mode_name']}: `{dmg_display}` | "
-                f"Alc `{mode['reach']}` | Ap `{mode['parry']}`{notes}"
+            notes = (
+                f" {_ansi('(' + mode['notes'] + ')', DEFAULT_COLOR)}"
+                if mode["notes"]
+                else ""
             )
 
-        melee_fields.append(
-            (f"{badge} {weapon['name']} (x{weapon['quantity']})", "\n".join(lines))
+            lines.append(
+                f"{_ansi(mode['mode_name'] + ':', MODE_COLOR)} "
+                f"{_ansi(dmg_display, DAMAGE_COLOR)} | "
+                f"{_ansi('Alc', LABEL_COLOR)} {_sanitize(mode['reach'])} | "
+                f"{_ansi('Ap', LABEL_COLOR)} {_sanitize(mode['parry'])}{notes}"
+            )
+
+        fields.append(
+            (
+                f"{_badge_label(weapon['is_equipped'])} "
+                f"{weapon['name']} (x{weapon['quantity']})",
+                _code_block(lines),
+            )
         )
 
-    ranged_fields = []
-    ranged_weight = 0.0
+    return fields, total_weight, equipped_count
+
+
+def _build_ranged_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
+    """Builds the ranged weapon fields with firing statistics."""
+    fields = []
+    total_weight = 0.0
+    equipped_count = 0
+
     for weapon in data["ranged_weapons"]:
-        badge = "[EQUIPADO]" if weapon["is_equipped"] else "[GUARDADO]"
         equipped_count += int(weapon["is_equipped"])
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
-        ranged_weight += item_weight
 
-        value = (
-            f"Dano `{weapon['damage']}` | Acc `{weapon['acc']}`\n"
-            f"Alcance `{weapon['range_half']}/{weapon['range_max']}` | "
-            f"Tiros `{weapon['shots']}`\n"
-            f"Peso `{item_weight:.2f} kg`"
+        range_display = f"{weapon['range_half']}/{weapon['range_max']}"
+
+        lines = [
+            _stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR),
+            f"{_stat('Dano', weapon['damage'], DAMAGE_COLOR)} | {_stat('Precisão', str(weapon['acc']))}",
+            f"{_stat('Alcance', range_display)} | {_stat('Tiros', str(weapon['shots']))}",
+        ]
+
+        fields.append(
+            (
+                f"{_badge_label(weapon['is_equipped'])} "
+                f"{weapon['name']} (x{weapon['quantity']})",
+                _code_block(lines),
+            )
         )
 
-        ranged_fields.append(
-            (f"{badge} {weapon['name']} (x{weapon['quantity']})", value)
-        )
+    return fields, total_weight, equipped_count
 
-    armor_fields = []
-    armor_weight = 0.0
-    has_flexible_armor = False
+
+def _build_armor_fields(
+    data: dict,
+) -> tuple[list[tuple[str, str]], float, int, bool]:
+    """Builds the modular armor fields with damage resistance and value."""
+    fields = []
+    total_weight = 0.0
+    equipped_count = 0
+    has_flexible = False
+
     for armor in data["armors"]:
-        badge = "[EQUIPADO]" if armor["is_equipped"] else "[GUARDADO]"
         equipped_count += int(armor["is_equipped"])
         item_weight = armor["weight"] * armor["quantity"]
         item_cost = armor["cost"] * armor["quantity"]
         total_weight += item_weight
-        armor_weight += item_weight
+        has_flexible = has_flexible or bool(armor["is_flexible"])
 
         dr_display = f"{armor['dr']}*" if armor["is_flexible"] else f"{armor['dr']}"
-        has_flexible_armor = has_flexible_armor or bool(armor["is_flexible"])
 
-        value = (
-            f"RD `{dr_display}` | Local `{armor['location']}`\n"
-            f"Peso `{item_weight:.2f} kg` | Valor `$ {item_cost:.2f}`"
-        )
+        lines = [
+            f"{_stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)} | "
+            f"{_stat('Valor', f'$ {item_cost:.2f}', MONEY_COLOR)}",
+            f"{_stat('RD', dr_display, DR_COLOR)} | {_stat('Local', armor['location'])}",
+        ]
 
-        armor_fields.append(
-            (f"{badge} {armor['name']} (x{armor['quantity']})", value)
-        )
-
-    item_fields = []
-    item_weight_total = 0.0
-    for item in data["items"]:
-        item_weight = item["weight"] * item["quantity"]
-        total_weight += item_weight
-        item_weight_total += item_weight
-
-        description = item["description"] or ""
-        desc_text = f"\n*{description}*" if description else ""
-
-        item_fields.append(
+        fields.append(
             (
-                f"{item['name']} (x{item['quantity']})",
-                f"Peso `{item_weight:.2f} kg`{desc_text}",
+                f"{_badge_label(armor['is_equipped'])} "
+                f"{armor['name']} (x{armor['quantity']})",
+                _code_block(lines),
             )
         )
 
-    item_count = (
-        len(data["melee_weapons"])
-        + len(data["ranged_weapons"])
-        + len(data["armors"])
-        + len(data["items"])
-    )
+    return fields, total_weight, equipped_count, has_flexible
 
-    embeds = [
-        _build_summary_embed(data, total_weight, equipped_count, item_count, strength)
+
+def _build_item_fields(data: dict) -> tuple[list[tuple[str, str]], float]:
+    """Builds the general item fields with weight and description."""
+    fields = []
+    total_weight = 0.0
+
+    for item in data["items"]:
+        item_weight = item["weight"] * item["quantity"]
+        total_weight += item_weight
+
+        quantity_display = str(item["quantity"])
+
+        lines = [
+            f"{_stat('Peso', f'{item_weight:.2f} kg', WEIGHT_COLOR)} | "
+            f"{_stat('Qtd', f'x{quantity_display}')}"
+        ]
+        if item["description"]:
+            lines.append(_ansi(item["description"], DEFAULT_COLOR))
+
+        fields.append((f"{item['name']}", _code_block(lines)))
+
+    return fields, total_weight
+
+
+def _build_summary_page(
+    data: dict,
+    total_weight: float,
+    equipped_count: int,
+    item_count: int,
+    strength: int | None,
+) -> dict:
+    """Builds the golden summary page with the core inventory metrics."""
+    if item_count == 0:
+        description = "*Nenhum equipamento ou item registrado.*"
+    else:
+        description = "*Registro de equipamento e carga do personagem.*"
+
+    fields = [
+        ("Dinheiro", _code_block([_ansi(f"$ {data['money']}", MONEY_COLOR)]), True),
+        (
+            "Peso Total",
+            _code_block([_ansi(f"{total_weight:.2f} kg", WEIGHT_COLOR)]),
+            True,
+        ),
+        ("Equipados", _code_block([_ansi(str(equipped_count), EQUIPPED_COLOR)]), True),
+        ("Itens", _code_block([_ansi(str(item_count), DEFAULT_COLOR)]), True),
     ]
 
-    _append_section(
-        embeds,
-        f"Armas Corpo a Corpo [{len(melee_fields)}] - {melee_weight:.2f} kg",
+    if strength is not None:
+        label, penalty, color = _encumbrance_level(total_weight, strength)
+        penalty_text = f" ({penalty})" if penalty else ""
+        fields.append(
+            (
+                "Carga",
+                _code_block([_ansi(f"{label}{penalty_text}", color)]),
+                True,
+            )
+        )
+
+    return {
+        "title": f"Inventário: {data['character_name']}",
+        "color": discord.Color.gold(),
+        "description": description,
+        "fields": fields,
+    }
+
+
+def _paginate_fields(
+    fields: list[tuple[str, str]],
+    title: str,
+    description: str | None,
+    budget: int = 5400,
+) -> list[list[tuple[str, str]]]:
+    """Splits item fields into pages respecting field count and payload budgets."""
+    chunks = []
+    current: list[tuple[str, str]] = []
+    used = len(title) + len(description or "") + 64
+
+    for field in fields:
+        name, value = field
+        entry_size = len(name) + len(value)
+
+        if current and (len(current) >= 25 or used + entry_size > budget):
+            chunks.append(current)
+            current = []
+            used = len(title) + 64
+
+        current.append(field)
+        used += entry_size
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+def _append_category_pages(
+    pages: list[dict],
+    character_name: str,
+    title: str,
+    color: discord.Color,
+    fields: list[tuple[str, str]],
+    weight: float,
+    legend: str | None = None,
+) -> None:
+    """Appends the paginated pages of a single inventory category."""
+    if not fields:
+        return
+
+    base_title = f"{title}: {character_name}"
+    count_label = "item" if len(fields) == 1 else "itens"
+    description = f"*{len(fields)} {count_label} - {weight:.2f} kg*"
+    if legend:
+        description += f"\n{legend}"
+
+    for index, chunk in enumerate(_paginate_fields(fields, base_title, description)):
+        pages.append(
+            {
+                "title": base_title if index == 0 else f"{base_title} (continuação)",
+                "color": color,
+                "description": description if index == 0 else None,
+                "fields": [(name, value, False) for name, value in chunk],
+            }
+        )
+
+
+def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]:
+    """Builds the paginated inventory pages with ANSI colored item fields."""
+    melee_fields, melee_weight, melee_equipped = _build_melee_fields(data)
+    ranged_fields, ranged_weight, ranged_equipped = _build_ranged_fields(data)
+    armor_fields, armor_weight, armor_equipped, has_flexible = _build_armor_fields(data)
+    item_fields, item_weight = _build_item_fields(data)
+
+    item_count = (
+        len(melee_fields) + len(ranged_fields) + len(armor_fields) + len(item_fields)
+    )
+    total_weight = melee_weight + ranged_weight + armor_weight + item_weight
+    equipped_count = melee_equipped + ranged_equipped + armor_equipped
+
+    pages = [
+        _build_summary_page(data, total_weight, equipped_count, item_count, strength)
+    ]
+
+    _append_category_pages(
+        pages,
+        data["character_name"],
+        "Armas Corpo a Corpo",
         discord.Color.dark_red(),
         melee_fields,
+        melee_weight,
     )
-
-    _append_section(
-        embeds,
-        f"Armas a Distância [{len(ranged_fields)}] - {ranged_weight:.2f} kg",
+    _append_category_pages(
+        pages,
+        data["character_name"],
+        "Armas a Distância",
         discord.Color.dark_teal(),
         ranged_fields,
+        ranged_weight,
     )
-
-    armor_legend = "* RD flexível" if has_flexible_armor else None
-    _append_section(
-        embeds,
-        f"Armaduras [{len(armor_fields)}] - {armor_weight:.2f} kg",
+    _append_category_pages(
+        pages,
+        data["character_name"],
+        "Armaduras",
         discord.Color.dark_blue(),
         armor_fields,
-        armor_legend,
+        armor_weight,
+        "* RD flexível" if has_flexible else None,
     )
-
-    _append_section(
-        embeds,
-        f"Itens Gerais [{len(item_fields)}] - {item_weight_total:.2f} kg",
+    _append_category_pages(
+        pages,
+        data["character_name"],
+        "Itens Gerais",
         discord.Color.dark_grey(),
         item_fields,
+        item_weight,
     )
 
-    if len(embeds) > 10:
-        embeds = embeds[:10]
-        note = "\n... (exibição truncada)"
-        embeds[-1].description = ((embeds[-1].description or "") + note)[:4000]
-
-    if item_count == 0:
-        embeds[0].description = "*Nenhum equipamento ou item registrado.*"
-
-    return embeds
+    return pages
 
 
 class InventoryView(discord.ui.View):
-    """Interactive view rendering the character inventory embeds."""
+    """Paginated view rendering one inventory page at a time."""
 
     def __init__(
         self,
+        pages: list[dict],
         author_id: int,
+        thumbnail_url: str | None = None,
         back_callback=None,
     ):
         super().__init__(timeout=None)
+        self.pages = pages
         self.author_id = author_id
+        self.thumbnail_url = thumbnail_url
         self.back_callback = back_callback
+        self.current_page = 0
+
+        self.previous_button = discord.ui.Button(
+            label="< Anterior",
+            style=discord.ButtonStyle.secondary,
+        )
+        self.previous_button.callback = self.previous_page
+        self.add_item(self.previous_button)
+
+        self.next_button = discord.ui.Button(
+            label="Próxima >",
+            style=discord.ButtonStyle.secondary,
+        )
+        self.next_button.callback = self.next_page
+        self.add_item(self.next_button)
 
         if back_callback is not None:
             back_button = discord.ui.Button(
@@ -258,6 +419,38 @@ class InventoryView(discord.ui.View):
             )
             back_button.callback = self.go_back
             self.add_item(back_button)
+
+        self._sync_buttons()
+
+    def _sync_buttons(self) -> None:
+        """Refreshes the navigation button states for the current page."""
+        self.previous_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page >= len(self.pages) - 1
+
+    def build_embed(self) -> discord.Embed:
+        """Renders the current page as a single clamped embed with page footer."""
+        page = self.pages[self.current_page]
+
+        embed = discord.Embed(
+            title=page["title"][:256],
+            color=page["color"],
+        )
+
+        if page.get("description"):
+            embed.description = page["description"][:4000]
+
+        for name, value, inline in page["fields"]:
+            embed.add_field(
+                name=name[:256],
+                value=_clamp_field_value(value),
+                inline=inline,
+            )
+
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
+
+        embed.set_footer(text=f"Página {self.current_page + 1} de {len(self.pages)}")
+        return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Restricts interaction to the user who invoked the command."""
@@ -268,6 +461,26 @@ class InventoryView(discord.ui.View):
             )
             return False
         return True
+
+    async def previous_page(self, interaction: discord.Interaction):
+        """Moves the view to the previous inventory page."""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._sync_buttons()
+            await interaction.response.edit_message(
+                embed=self.build_embed(),
+                view=self,
+            )
+
+    async def next_page(self, interaction: discord.Interaction):
+        """Moves the view to the next inventory page."""
+        if self.current_page < len(self.pages) - 1:
+            self.current_page += 1
+            self._sync_buttons()
+            await interaction.response.edit_message(
+                embed=self.build_embed(),
+                view=self,
+            )
 
     async def go_back(self, interaction: discord.Interaction):
         """Delegates navigation back to the parent view when configured."""
@@ -395,7 +608,7 @@ class Inventory(commands.Cog):
         description="Exibe o inventário completo, armas, armaduras e equipamentos do seu personagem.",
     )
     async def view_inventory(self, interaction: discord.Interaction):
-        """Displays character inventory using the persistent database connection."""
+        """Displays the paginated character inventory using the persistent connection."""
         await interaction.response.defer(ephemeral=True)
 
         data = get_character_inventory_data(
@@ -414,23 +627,28 @@ class Inventory(commands.Cog):
         except ValueError:
             strength = None
 
-        embeds = build_inventory_embeds(data, strength)
-        view = InventoryView(author_id=interaction.user.id)
-
+        pages = build_inventory_pages(data, strength)
         character_file, thumbnail_url = get_character_thumbnail_by_id(
             self.db_connection, data["character_id"]
         )
-
-        if thumbnail_url:
-            embeds[0].set_thumbnail(url=thumbnail_url)
+        view = InventoryView(
+            pages=pages,
+            author_id=interaction.user.id,
+            thumbnail_url=thumbnail_url,
+        )
 
         if character_file is not None:
             await interaction.followup.send(
-                embeds=embeds, file=character_file, view=view, ephemeral=True
+                embed=view.build_embed(),
+                file=character_file,
+                view=view,
+                ephemeral=True,
             )
         else:
             await interaction.followup.send(
-                embeds=embeds, view=view, ephemeral=True
+                embed=view.build_embed(),
+                view=view,
+                ephemeral=True,
             )
 
 
