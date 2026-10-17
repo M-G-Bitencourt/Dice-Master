@@ -5,6 +5,11 @@
 # Dice-Master
 Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines gameplay by automating dice rolls, damage calculations, and character sheet management directly in the chat.
 
+## General Commands
+| Command | Description |
+| :---: | :---: |
+| /help | List all available commands and their descriptions. |
+
 ## Battle Commands
 | Command | Description |
 | :---: | :---: |

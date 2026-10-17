@@ -59,7 +59,8 @@ class DiceMasterBot(commands.Bot):
             "cogs.skills",
             "cogs.inventory",
             "cogs.spells",
-            "cogs.traits"
+            "cogs.traits",
+            "cogs.help"
             ]
 
         for extension in extensions:
