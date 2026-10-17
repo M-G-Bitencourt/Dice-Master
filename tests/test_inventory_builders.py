@@ -73,6 +73,16 @@ def melee_weapon(**overrides) -> dict:
     return weapon
 
 
+def bulky_modes(count: int = 4) -> list[dict]:
+    return [
+        melee_mode(
+            mode_name=f"Modo {index}",
+            notes="Dano original: GeB+1. ST Mín 9. " + "detalhe " * 30,
+        )
+        for index in range(count)
+    ]
+
+
 def ranged_weapon(**overrides) -> dict:
     weapon = {
         "name": "Pistola",
@@ -284,6 +294,29 @@ class TestBuildMeleeFields:
 
         assert len(fields) == 2
         assert total_weight == pytest.approx(8.0)
+        assert equipped_count == 1
+
+    def test_long_mode_lists_split_into_complete_continuation_fields(self):
+        weapon = melee_weapon(
+            name="Espada de Ossos",
+            is_equipped=1,
+            modes=bulky_modes(),
+        )
+
+        fields, total_weight, equipped_count = _build_melee_fields(
+            {"melee_weapons": [weapon]}
+        )
+
+        assert len(fields) > 1
+        assert fields[0][0] == "[EQUIPADO] Espada de Ossos (x1)"
+        assert fields[1][0] == "[EQUIPADO] Espada de Ossos (x1) - Modos (cont.)"
+        joined = "\n".join(value for _, value in fields)
+        for index in range(4):
+            assert f"Modo {index}:" in joined
+        assert all(len(value) <= 1000 for _, value in fields)
+        assert all(value.startswith("```ansi\n") for _, value in fields)
+        assert all(value.endswith("\n```") for _, value in fields)
+        assert total_weight == pytest.approx(2.5)
         assert equipped_count == 1
 
     def test_empty_weapon_list_yields_no_fields(self):
@@ -654,6 +687,24 @@ class TestBuildInventoryPages:
         assert "*1 item - 1.00 kg*" == pages[2]["description"]
         assert "*1 item - 5.00 kg*\n* RD flexível" == pages[3]["description"]
         assert "*1 item - 3.00 kg*" == pages[4]["description"]
+
+    def test_continuation_fields_do_not_inflate_item_counts(self):
+        data = inventory_data(
+            melee_weapons=[melee_weapon(is_equipped=1, modes=bulky_modes())],
+        )
+
+        pages = build_inventory_pages(data, strength=10)
+
+        summary = {field[0]: field[1] for field in pages[0]["fields"]}
+        assert "1" in summary["Itens"]
+        assert pages[1]["description"] == "*1 item - 2.50 kg*"
+        melee_fields = [
+            field
+            for page in pages[1:]
+            if page["title"].startswith("Armas Corpo a Corpo")
+            for field in page["fields"]
+        ]
+        assert len(melee_fields) > 1
 
     def test_armor_legend_is_absent_when_all_pieces_are_rigid(self):
         data = inventory_data(armors=[armor(is_flexible=0)])

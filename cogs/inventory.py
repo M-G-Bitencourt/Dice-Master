@@ -56,6 +56,34 @@ def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int, st
     return "Muito Pesada", -4, DANGER_COLOR
 
 
+MELEE_FIELD_BUDGET = 950
+
+
+def _chunk_melee_mode_lines(header: str, mode_lines: list[str]) -> list[list[str]]:
+    """Splits colored mode lines into chunks that fit a single embed field."""
+    if not mode_lines:
+        return [[header]]
+
+    chunks: list[list[str]] = []
+    current = [header]
+    current_has_mode = False
+
+    for line in mode_lines:
+        separator = [ansi("-" * 40, NEUTRAL_COLOR)] if current_has_mode else []
+        candidate = current + separator + [line]
+
+        if current_has_mode and len(code_block(candidate)) > MELEE_FIELD_BUDGET:
+            chunks.append(current)
+            current = [line]
+        else:
+            current = candidate
+
+        current_has_mode = True
+
+    chunks.append(current)
+    return chunks
+
+
 def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
     """Builds the melee weapon fields with attack mode sub-lines."""
     fields = []
@@ -71,11 +99,8 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
         if weapon["min_st"] > 0:
             header += f"  {_stat('ST Mín', str(weapon['min_st']))}"
 
-        lines = [header]
-        for index, mode in enumerate(weapon["modes"]):
-            if index > 0:
-                lines.append(ansi("-" * 40, NEUTRAL_COLOR))
-
+        mode_lines = []
+        for mode in weapon["modes"]:
             dmg_sign = (
                 f"{mode['damage_modifier']:+d}"
                 if mode["damage_modifier"] != 0
@@ -90,20 +115,23 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
                 else ""
             )
 
-            lines.append(
+            mode_lines.append(
                 f"{ansi(mode['mode_name'] + ':', MODE_COLOR)} "
                 f"{ansi(dmg_display, DANGER_COLOR)} | "
                 f"{ansi('Alc', LABEL_COLOR)} {sanitize(mode['reach'])} | "
                 f"{ansi('Ap', LABEL_COLOR)} {sanitize(mode['parry'])}{notes}"
             )
 
-        fields.append(
-            (
-                f"{_badge_label(weapon['is_equipped'])} "
-                f"{weapon['name']} (x{weapon['quantity']})",
-                code_block(lines),
-            )
+        weapon_name = (
+            f"{_badge_label(weapon['is_equipped'])} "
+            f"{weapon['name']} (x{weapon['quantity']})"
         )
+
+        for index, chunk in enumerate(_chunk_melee_mode_lines(header, mode_lines)):
+            field_name = (
+                weapon_name if index == 0 else f"{weapon_name} - Modos (cont.)"
+            )
+            fields.append((field_name, code_block(chunk)))
 
     return fields, total_weight, equipped_count
 
@@ -276,14 +304,16 @@ def _append_category_pages(
     fields: list[tuple[str, str]],
     weight: float,
     legend: str | None = None,
+    item_count: int | None = None,
 ) -> None:
     """Appends the paginated pages of a single inventory category."""
     if not fields:
         return
 
+    total_items = len(fields) if item_count is None else item_count
     base_title = f"{title}: {character_name}"
-    count_label = "item" if len(fields) == 1 else "itens"
-    description = f"*{len(fields)} {count_label} - {weight:.2f} kg*"
+    count_label = "item" if total_items == 1 else "itens"
+    description = f"*{total_items} {count_label} - {weight:.2f} kg*"
     if legend:
         description += f"\n{legend}"
 
@@ -306,7 +336,10 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
     item_fields, item_weight = _build_item_fields(data)
 
     item_count = (
-        len(melee_fields) + len(ranged_fields) + len(armor_fields) + len(item_fields)
+        len(data["melee_weapons"])
+        + len(data["ranged_weapons"])
+        + len(data["armors"])
+        + len(data["items"])
     )
     total_weight = melee_weight + ranged_weight + armor_weight + item_weight
     equipped_count = melee_equipped + ranged_equipped + armor_equipped
@@ -322,6 +355,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
         discord.Color.dark_red(),
         melee_fields,
         melee_weight,
+        item_count=len(data["melee_weapons"]),
     )
     _append_category_pages(
         pages,
@@ -330,6 +364,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
         discord.Color.dark_teal(),
         ranged_fields,
         ranged_weight,
+        item_count=len(data["ranged_weapons"]),
     )
     _append_category_pages(
         pages,
@@ -339,6 +374,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
         armor_fields,
         armor_weight,
         "* RD flexível" if has_flexible else None,
+        item_count=len(data["armors"]),
     )
     _append_category_pages(
         pages,
@@ -347,6 +383,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
         discord.Color.dark_grey(),
         item_fields,
         item_weight,
+        item_count=len(data["items"]),
     )
 
     return pages
