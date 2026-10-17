@@ -21,15 +21,6 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /apt | Execute an aim maneuver with a ranged weapon. |
 | /eval | Execute an evaluate maneuver with a melee weapon. |
 
-![Autocomplete for the local parameter of /atk](/assets/atk_slash_command.png)
-*Example: `/atk` local parameter autocomplete.*
-
-![Successful /atk roll](/assets/atk.png)
-*Example: `/atk` attack result.*
-
-![Failed /def roll](/assets/def.png)
-*Example: `/def` defense and damage resolution.*
-
 ## Administrative Commands
 | Command | Description |
 | :---: | :---: |
@@ -41,20 +32,11 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /view_next_turn_conditions      | View feint, aim, evaluate, and shock modifiers for a specific character. |
 | /manage_xp                      | Adds or removes character points from a character. |
 
-![Restored character resources](/assets/restore_character_resource.png)
-*Example: `/restore_character_resources` output.*
-
 ## Skill Test Commands
 | Command | Description |
 | :---: | :---: |
 | /test | Perform a success roll. |
 | /qkd | Resolve a quick contest and return the winner. |
-
-![Successful /test roll](/assets/test.png)
-*Example: `/test` success roll.*
-
-![Quick contest result](/assets/quick_dispute.png)
-*Example: `/qkd` quick contest result.*
 
 ## Sheet Commands
 | Command | Description |
@@ -68,20 +50,11 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /list_traits | Displays all advantages and disadvantages possessed by your character, their cost, and their description |
 | /master_list_traits | Displays all advantages and disadvantages possessed by any character, their cost, and their description |
 
-![Character sheet hub](/assets/sheet.png)
-*Example: `/sheet` character sheet hub.*
-
-![Paginated skill list](/assets/skills.png)
-*Example: `/list_skills` paginated skill list.*
-
 ## Inventory Commands
 | Command | Description |
 | :---: | :---: |
 | /manage_money | Adds or removes money from a character. |
 | /inventory | Displays the complete inventory. |
-
-![Money transaction](/assets/manage_money.png)
-*Example: `/manage_money` transaction.*
 
 ## Other Tests Commands
 | Command | Description |
@@ -90,8 +63,48 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 | /react | Perform a reaction roll. |
 | /panic | Execute a panic check and return the result. |
 
-![Reaction roll result](/assets/react.png)
-*Example: `/react` reaction roll.*
+## Screenshots
 
-![Panic check result](/assets/panic.png)
-*Example: `/panic` panic check.*
+### Battle Commands
+
+| | |
+| :---: | :---: |
+| ![Autocomplete for the local parameter of /atk](/assets/atk_slash_command.png) | ![Successful /atk roll](/assets/atk.png) |
+| *`/atk` local parameter autocomplete* | *`/atk` attack result* |
+| ![Failed /def roll](/assets/def.png) | |
+| *`/def` defense and damage resolution* | |
+
+### Administrative Commands
+
+| | |
+| :---: | :---: |
+| ![Restored character resources](/assets/restore_character_resource.png) | |
+| *`/restore_character_resources` output* | |
+
+### Skill Test Commands
+
+| | |
+| :---: | :---: |
+| ![Successful /test roll](/assets/test.png) | ![Quick contest result](/assets/quick_dispute.png) |
+| *`/test` success roll* | *`/qkd` quick contest result* |
+
+### Sheet Commands
+
+| | |
+| :---: | :---: |
+| ![Character sheet hub](/assets/sheet.png) | ![Paginated skill list](/assets/skills.png) |
+| *`/sheet` character sheet hub* | *`/list_skills` paginated skill list* |
+
+### Inventory Commands
+
+| | |
+| :---: | :---: |
+| ![Money transaction](/assets/manage_money.png) | |
+| *`/manage_money` transaction* | |
+
+### Other Tests Commands
+
+| | |
+| :---: | :---: |
+| ![Reaction roll result](/assets/react.png) | ![Panic check result](/assets/panic.png) |
+| *`/react` reaction roll* | *`/panic` panic check* |
