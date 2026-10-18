@@ -67,44 +67,58 @@ Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines
 
 ### Battle Commands
 
-| | |
-| :---: | :---: |
-| ![Autocomplete for the local parameter of /atk](/assets/atk_slash_command.png) | ![Successful /atk roll](/assets/atk.png) |
-| *`/atk` local parameter autocomplete* | *`/atk` attack result* |
-| ![Failed /def roll](/assets/def.png) | |
-| *`/def` defense and damage resolution* | |
+<p align="center">
+  <img src="/assets/atk_slash_command.png" alt="/atk local parameter autocomplete" width="45%">
+  <img src="/assets/atk.png" alt="/atk attack result" width="45%">
+  <br>
+  <em>`/atk` local parameter autocomplete | `/atk` attack result</em>
+</p>
+
+<p align="center">
+  <img src="/assets/def.png" alt="/def defense and damage resolution" width="45%">
+  <br>
+  <em>`/def` defense and damage resolution</em>
+</p>
 
 ### Administrative Commands
 
-| | |
-| :---: | :---: |
-| ![Restored character resources](/assets/restore_character_resource.png) | |
-| *`/restore_character_resources` output* | |
+<p align="center">
+  <img src="/assets/restore_character_resource.png" alt="/restore_character_resources output" width="45%">
+  <br>
+  <em>`/restore_character_resources` output</em>
+</p>
 
 ### Skill Test Commands
 
-| | |
-| :---: | :---: |
-| ![Successful /test roll](/assets/test.png) | ![Quick contest result](/assets/quick_dispute.png) |
-| *`/test` success roll* | *`/qkd` quick contest result* |
+<p align="center">
+  <img src="/assets/test.png" alt="/test success roll" width="45%">
+  <img src="/assets/quick_dispute.png" alt="/qkd quick contest result" width="45%">
+  <br>
+  <em>`/test` success roll | `/qkd` quick contest result</em>
+</p>
 
 ### Sheet Commands
 
-| | |
-| :---: | :---: |
-| ![Character sheet hub](/assets/sheet.png) | ![Paginated skill list](/assets/skills.png) |
-| *`/sheet` character sheet hub* | *`/list_skills` paginated skill list* |
+<p align="center">
+  <img src="/assets/sheet.png" alt="/sheet character sheet hub" width="45%">
+  <img src="/assets/skills.png" alt="/list_skills paginated skill list" width="45%">
+  <br>
+  <em>`/sheet` character sheet hub | `/list_skills` paginated skill list</em>
+</p>
 
 ### Inventory Commands
 
-| | |
-| :---: | :---: |
-| ![Money transaction](/assets/manage_money.png) | |
-| *`/manage_money` transaction* | |
+<p align="center">
+  <img src="/assets/manage_money.png" alt="/manage_money transaction" width="45%">
+  <br>
+  <em>`/manage_money` transaction</em>
+</p>
 
 ### Other Tests Commands
 
-| | |
-| :---: | :---: |
-| ![Reaction roll result](/assets/react.png) | ![Panic check result](/assets/panic.png) |
-| *`/react` reaction roll* | *`/panic` panic check* |
+<p align="center">
+  <img src="/assets/react.png" alt="/react reaction roll" width="45%">
+  <img src="/assets/panic.png" alt="/panic panic check" width="45%">
+  <br>
+  <em>`/react` reaction roll | `/panic` panic check</em>
+</p>
