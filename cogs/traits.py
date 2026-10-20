@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 from pathlib import Path
 
@@ -18,10 +17,7 @@ from utils.ansi import (
     sanitize,
     truncate_visible,
 )
-from utils.db_functions import (
-    _resolve_character_id,
-    get_character_traits_data,
-)
+
 
 
 def build_trait_row(trait: dict) -> str:
@@ -257,141 +253,6 @@ class Traits(commands.Cog):
         self.db_connection = sqlite3.connect(database_path)
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
-    async def character_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]:
-        """Dynamically queries the database for characters matching the user's keystrokes."""
-        cursor = self.db_connection.cursor()
-        search_pattern = f"%{current}%"
-
-        cursor.execute(
-            "SELECT character_id, name FROM characters WHERE name LIKE ? LIMIT 25",
-            (search_pattern,),
-        )
-
-        return [
-            app_commands.Choice(name=row[1], value=str(row[0]))
-            for row in cursor.fetchall()
-        ]
-
-    @app_commands.command(
-        name="master_list_traits",
-        description="Exibe a lista de vantagens e desvantagens com inspeção detalhada.",
-    )
-    @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(
-        character="Personagem a ser consultado (apenas administradores podem consultar terceiros)."
-    )
-    async def master_list_traits(
-        self,
-        interaction: discord.Interaction,
-        character: str | None = None,
-    ):
-        """Renders character advantages and disadvantages with inspection dropdown."""
-        await interaction.response.defer(ephemeral=True)
-
-        if character is not None:
-            try:
-                target_char_id = int(character)
-            except ValueError:
-                await interaction.followup.send(
-                    "Erro de processamento: O identificador do personagem fornecido é inválido.",
-                    ephemeral=True,
-                )
-                return
-        else:
-            try:
-                target_char_id = _resolve_character_id(
-                    self.db_connection, interaction.user.id
-                )
-            except ValueError:
-                await interaction.followup.send(
-                    "Erro: Você não possui um personagem ativo atribuído à sua conta.",
-                    ephemeral=True,
-                )
-                return
-
-        traits_data = get_character_traits_data(
-            self.db_connection, target_char_id
-        )
-
-        if not traits_data:
-            await interaction.followup.send(
-                f"Erro de consistência: Personagem com ID `{target_char_id}` não foi localizado.",
-                ephemeral=True,
-            )
-            return
-
-        if not traits_data["advantages"] and not traits_data["disadvantages"]:
-            await interaction.followup.send(
-                f"O personagem {traits_data['character_name']} não possui nenhuma vantagem ou desvantagem cadastrada.",
-                ephemeral=True,
-            )
-            return
-
-        view = TraitListView(
-            character_name=traits_data["character_name"],
-            traits=traits_data["advantages"] + traits_data["disadvantages"],
-            author_id=interaction.user.id,
-        )
-
-        await interaction.followup.send(
-            content=view.build_content(),
-            view=view,
-            ephemeral=True,
-        )
-
-    @app_commands.command(
-        name="list_traits",
-        description="Exibe a lista de vantagens e desvantagens do seu personagem com inspeção detalhada.",
-    )
-    async def list_traits(self, interaction: discord.Interaction):
-        """Renders the caller's character advantages and disadvantages with inspection dropdown."""
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            target_char_id = _resolve_character_id(
-                self.db_connection, interaction.user.id
-            )
-        except ValueError:
-            await interaction.followup.send(
-                "Erro: Você não possui um personagem ativo atribuído à sua conta.",
-                ephemeral=True,
-            )
-            return
-
-        traits_data = get_character_traits_data(
-            self.db_connection, target_char_id
-        )
-
-        if not traits_data:
-            await interaction.followup.send(
-                f"Erro de consistência: Personagem com ID `{target_char_id}` não foi localizado.",
-                ephemeral=True,
-            )
-            return
-
-        if not traits_data["advantages"] and not traits_data["disadvantages"]:
-            await interaction.followup.send(
-                f"O personagem {traits_data['character_name']} não possui nenhuma vantagem ou desvantagem cadastrada.",
-                ephemeral=True,
-            )
-            return
-
-        view = TraitListView(
-            character_name=traits_data["character_name"],
-            traits=traits_data["advantages"] + traits_data["disadvantages"],
-            author_id=interaction.user.id,
-        )
-
-        await interaction.followup.send(
-            content=view.build_content(),
-            view=view,
-            ephemeral=True,
-        )
 
 async def setup(bot: commands.Bot) -> None:
     """Mandatory asynchronous entry point to load the extension."""

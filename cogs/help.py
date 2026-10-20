@@ -23,6 +23,7 @@ CATEGORY_LABELS = {
     "Skill_tests": "TESTES DE HABILIDADE",
     "Other_tests": "TESTES GERAIS",
     "Battle": "COMBATE",
+    "Combat": "COMBATE",
     "Skills": "PERÍCIAS",
     "Spells": "MAGIAS",
     "Traits": "TRAÇOS",

@@ -65,39 +65,30 @@ BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 DATABASE_FILE_PATH = BASE_DIRECTORY / "data" / "database.db"
 
 
-def consume_deterministic_fate(player_identifier: int) -> Optional[int]:
+def consume_deterministic_fate(
+    player_identifier: int,
+    connection: sqlite3.Connection | None = None,
+) -> Optional[int]:
     """
-    Queries the SQLite database for a deterministic fate assigned to a specific player.
-    If a fate exists, it retrieves the value, purges the record to prevent
-    infinite repetition, and returns the integer.
-    Returns None otherwise.
+    Atomically consumes a deterministic fate assigned to a specific player.
+    When a connection is supplied, the caller owns the transaction and must
+    commit or roll it back. Returns None when no fate is registered.
     """
     try:
+        if connection is not None:
+            row = connection.execute(
+                "DELETE FROM hdm WHERE id_player = ? RETURNING fate",
+                (player_identifier,),
+            ).fetchone()
+            return int(row[0]) if row is not None else None
+
         with sqlite3.connect(DATABASE_FILE_PATH) as db_connection:
-            db_cursor = db_connection.cursor()
-
-            # Step 1: Query the existing deterministic state
-            db_cursor.execute(
-                "SELECT fate FROM hdm WHERE id_player = ?", (player_identifier,)
-            )
-            query_result = db_cursor.fetchone()
-
-            if query_result is None:
-                return None
-
-            fate_value = query_result[0]
-
-            # Step 2: Purge the record to consume the state strictly
-            db_cursor.execute(
-                "DELETE FROM hdm WHERE id_player = ?", (player_identifier,)
-            )
-
-            # Commit the transaction atomically
+            row = db_connection.execute(
+                "DELETE FROM hdm WHERE id_player = ? RETURNING fate",
+                (player_identifier,),
+            ).fetchone()
             db_connection.commit()
-
-            return fate_value
+            return int(row[0]) if row is not None else None
 
     except sqlite3.Error:
-        # Failsafe: return None to allow standard RNG roll in case of structural failure.
-        # Warning: Exceptions are explicitly silenced here per the omission of logging.
         return None

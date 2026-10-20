@@ -77,16 +77,45 @@ class FakeFollowup:
         self.sent.append({"args": args, "kwargs": kwargs})
 
 
+class FakeMessage:
+    def __init__(self, message_id: int = 1):
+        self.id = message_id
+        self.embeds = []
+        self.views = []
+        self.deleted = False
+
+    async def edit(self, *args, **kwargs):
+        self.embeds.append(kwargs.get("embed"))
+        self.views.append(kwargs.get("view"))
+
+    async def delete(self):
+        self.deleted = True
+
+
 class FakeInteraction:
-    def __init__(self, user_id: int = 1, message=None):
+    def __init__(
+        self,
+        user_id: int = 1,
+        message=None,
+        channel_id: int = 100,
+        guild_id: int = 1,
+        original_message: FakeMessage | None = None,
+    ):
         self.user = FakeUser(user_id)
         self.response = FakeResponse()
         self.followup = FakeFollowup()
         self.message = message
+        self.channel_id = channel_id
+        self.guild_id = guild_id
+        self.channel = None
+        self._original_message = original_message or FakeMessage()
         self.edited = []
 
     async def edit_original_response(self, *args, **kwargs):
         self.edited.append({"args": args, "kwargs": kwargs})
+
+    async def original_response(self):
+        return self._original_message
 
 
 class FakeBot:
@@ -153,6 +182,42 @@ def insert_attack(
             "feint": feint,
             "critical_damage": critical_damage,
         },
+    )
+
+
+def insert_combat_effect(
+    connection: sqlite3.Connection,
+    name: str,
+    applies_to: str,
+    *,
+    target: str | None = None,
+    value: int = 0,
+    uses_per_turn: int = 0,
+    notes: str | None = None,
+) -> int:
+    """Insert one effect into the external catalog and return its id."""
+    return _insert_row(
+        connection,
+        "combat_effects",
+        {
+            "name": name,
+            "applies_to": applies_to,
+            "target": target,
+            "value": int(value),
+            "uses_per_turn": int(uses_per_turn),
+            "notes": notes,
+        },
+    )
+
+
+def link_combat_effect(
+    connection: sqlite3.Connection, character_id: int, effect_id: int
+) -> None:
+    """Link one catalog effect to a character."""
+    _insert_row(
+        connection,
+        "character_combat_effects",
+        {"character_id": character_id, "effect_id": effect_id},
     )
 
 
@@ -393,8 +458,8 @@ def insert_melee_weapon(
 def insert_melee_mode(
     connection: sqlite3.Connection,
     melee_weapon_id: int,
+    skill_id: int,
     mode_name: str = "Padrão",
-    skill_name: str = "Machado",
     damage_base: str = "GeB",
     damage_modifier: int = 0,
     damage_type: str = "corte",
@@ -408,7 +473,7 @@ def insert_melee_mode(
         {
             "melee_weapon_id": melee_weapon_id,
             "mode_name": mode_name,
-            "skill_name": skill_name,
+            "skill_id": skill_id,
             "damage_base": damage_base,
             "damage_modifier": damage_modifier,
             "damage_type": damage_type,
@@ -443,6 +508,7 @@ def link_melee_weapon(
 def insert_ranged_weapon(
     connection: sqlite3.Connection,
     name: str = "Pistola",
+    skill_id: int | None = None,
     damage: str = "2d+1 pi+",
     acc: int = 2,
     range_half: int = 150,
@@ -460,6 +526,7 @@ def insert_ranged_weapon(
         "ranged_weapons",
         {
             "name": name,
+            "skill_id": skill_id,
             "damage": damage,
             "acc": acc,
             "range_half": range_half,

@@ -108,6 +108,20 @@ def test_critical_damage_ignores_rolled_dice(monkeypatch):
     assert data["critical_damage"] == 12 + (-1) + 1
 
 
+def test_st13_swing_exposes_minus_one_expression(monkeypatch):
+    patch_rng(monkeypatch, battle_module, [1, 2])
+
+    data = damage_func(13, 1, 0)
+
+    assert data["expression"] == "2d-1"
+    assert data["dice_count"] == 2
+    assert data["dice_sum"] == 3
+    assert data["st_mod"] == -1
+    assert data["weapon_modifier"] == 0
+    assert data["total_modifier"] == -1
+    assert data["damage"] == 2
+
+
 @pytest.mark.parametrize("st, gdp_geb, expected_dice, expected_mod", ROUNDING_CASES)
 def test_st_between_40_and_100_rounds_down_to_multiple_of_five(
     monkeypatch, st, gdp_geb, expected_dice, expected_mod
@@ -214,11 +228,16 @@ def test_payload_exposes_exact_key_set(monkeypatch):
 
     assert set(data) == {
         "critical_damage",
+        "critical_dices",
         "damage",
         "dice_count",
         "dices",
+        "expression",
         "st_mod",
         "dice_sum",
+        "strong_bonus",
+        "total_modifier",
+        "weapon_modifier",
     }
 
 

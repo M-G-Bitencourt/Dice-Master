@@ -86,6 +86,7 @@ MELEE_KEYS = {
 
 MELEE_MODE_KEYS = {
     "mode_name",
+    "skill_id",
     "skill_name",
     "damage_base",
     "damage_modifier",
@@ -465,12 +466,13 @@ class TestGetCharacterInventoryData:
 
     def test_melee_weapons_include_modes_and_custom_name(self, db):
         character_id = insert_character(db)
+        skill_id = insert_skill(db, name="Machado", attribute="DX")
         axe_id = insert_melee_weapon(db, name="Machado", min_st=11, weight=2.5, cost=60.0)
         insert_melee_mode(
             db,
             axe_id,
+            skill_id,
             mode_name="Corte",
-            skill_name="Machado",
             damage_base="GeB",
             damage_modifier=2,
             damage_type="corte",
@@ -481,8 +483,8 @@ class TestGetCharacterInventoryData:
         insert_melee_mode(
             db,
             axe_id,
+            skill_id,
             mode_name="Padrão",
-            skill_name="Machado",
             damage_base="GdP",
             damage_modifier=0,
             damage_type="perfuração",
@@ -513,6 +515,7 @@ class TestGetCharacterInventoryData:
             "modes": [
                 {
                     "mode_name": "Corte",
+                    "skill_id": skill_id,
                     "skill_name": "Machado",
                     "damage_base": "GeB",
                     "damage_modifier": 2,
@@ -523,6 +526,7 @@ class TestGetCharacterInventoryData:
                 },
                 {
                     "mode_name": "Padrão",
+                    "skill_id": skill_id,
                     "skill_name": "Machado",
                     "damage_base": "GdP",
                     "damage_modifier": 0,

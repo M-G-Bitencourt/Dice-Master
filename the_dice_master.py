@@ -8,6 +8,8 @@ import configparser
 import sqlite3
 from pathlib import Path
 
+from utils.db_migrations import apply_migrations
+
 # ===============================================================
 
 # CONFIGURATIONS ===============================================================================================================
@@ -52,6 +54,7 @@ class DiceMasterBot(commands.Bot):
         """
         extensions = [
             "cogs.battle",
+            "cogs.combat",
             "cogs.admin",
             "cogs.other_tests",
             "cogs.skill_test",
@@ -115,6 +118,11 @@ def initialize_system_database() -> None:
             cursor = connection.cursor()
             cursor.executescript(schema_instructions)
             connection.commit()
+
+    # Step 4: Apply forward migrations to existing databases
+    with sqlite3.connect(binary_db_path) as connection:
+        connection.execute("PRAGMA foreign_keys = ON;")
+        apply_migrations(connection)
 
 
 # NORMAL COMMANDS ==================================================

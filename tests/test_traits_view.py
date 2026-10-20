@@ -1,4 +1,4 @@
-"""View and command tests for cogs/traits.py.
+"""View tests for cogs/traits.py.
 
 Rows, headers, category grouping, notes clamping and the detail dropdown are
 exercised with hand-built trait dicts shaped like
@@ -9,23 +9,15 @@ callbacks against the shared in-memory database.
 from __future__ import annotations
 
 import discord
-import pytest
 
 import cogs.traits as traits_module
 from cogs.traits import (
-    Traits,
     TraitListView,
     TraitSelect,
     build_trait_header,
     build_trait_row,
 )
-from helpers import (
-    FakeInteraction,
-    insert_advantage,
-    insert_disadvantage,
-    link_advantage,
-    link_disadvantage,
-)
+from helpers import FakeInteraction
 
 
 def trait(
@@ -53,18 +45,6 @@ def select_of(view: TraitListView) -> TraitSelect:
         if isinstance(item, TraitSelect):
             return item
     raise AssertionError("TraitSelect not found in the view")
-
-
-def followup_content(interaction, index: int = 0) -> str:
-    sent = interaction.followup.sent[index]
-    if "content" in sent["kwargs"]:
-        return sent["kwargs"]["content"]
-    return sent["args"][0]
-
-
-@pytest.fixture
-def cog(make_cog):
-    return make_cog(Traits)
 
 
 class TestBuildTraitRow:
@@ -337,65 +317,3 @@ class TestTraitListNavigationAndOwnership:
         assert interaction.response.messages[0]["args"][0] == (
             "Erro: Apenas o usuário que invocou o comando pode interagir com este menu."
         )
-
-
-class TestListTraitsCommand:
-    async def test_without_character_reports_the_missing_binding(self, cog, interaction):
-        await Traits.list_traits.callback(cog, interaction)
-
-        assert interaction.response.deferred[0]["kwargs"]["ephemeral"] is True
-        assert followup_content(interaction) == (
-            "Erro: Você não possui um personagem ativo atribuído à sua conta."
-        )
-
-    async def test_without_traits_reports_the_empty_registry(self, cog, interaction, character):
-        await Traits.list_traits.callback(cog, interaction)
-
-        assert followup_content(interaction) == (
-            "O personagem Cobaia não possui nenhuma vantagem ou desvantagem cadastrada."
-        )
-
-    async def test_with_traits_sends_the_paginated_view(self, cog, interaction, character, db):
-        advantage_id = insert_advantage(db, name="Reflexos de Combate", cost=15)
-        link_advantage(db, 1, advantage_id)
-
-        await Traits.list_traits.callback(cog, interaction)
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert sent["ephemeral"] is True
-        assert sent["content"] == sent["view"].build_content()
-        assert "Reflexos de Combate" in sent["content"]
-
-    async def test_master_command_accepts_an_explicit_character(self, cog, interaction, character, db):
-        disadvantage_id = insert_disadvantage(db, name="Miopia", cost=-10)
-        link_disadvantage(db, 1, disadvantage_id, notes="Usa óculos")
-
-        await Traits.master_list_traits.callback(cog, interaction, "1")
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert "Miopia" in sent["content"]
-        assert "-10 pts" in sent["content"]
-
-    async def test_master_command_rejects_an_invalid_identifier(self, cog, interaction):
-        await Traits.master_list_traits.callback(cog, interaction, "abc")
-
-        assert followup_content(interaction) == (
-            "Erro de processamento: O identificador do personagem fornecido é inválido."
-        )
-
-    async def test_master_command_reports_a_missing_character(self, cog, interaction):
-        await Traits.master_list_traits.callback(cog, interaction, "999")
-
-        assert followup_content(interaction) == (
-            "Erro de consistência: Personagem com ID `999` não foi localizado."
-        )
-
-    async def test_master_command_without_argument_falls_back_to_the_caller(
-        self, cog, interaction, character, db
-    ):
-        advantage_id = insert_advantage(db, name="Visão Noturna", cost=5)
-        link_advantage(db, 1, advantage_id)
-
-        await Traits.master_list_traits.callback(cog, interaction, None)
-
-        assert "Visão Noturna" in followup_content(interaction)

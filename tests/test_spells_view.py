@@ -1,4 +1,4 @@
-"""View and command tests for cogs/spells.py.
+"""View tests for cogs/spells.py.
 
 Rows, headers, school grouping, pagination and the detail dropdown are
 exercised with hand-built spell dicts shaped like
@@ -8,17 +8,15 @@ callbacks against the shared in-memory database.
 
 from __future__ import annotations
 
-import pytest
 
 import cogs.spells as spells_module
 from cogs.spells import (
-    Spells,
     SpellListView,
     SpellSelect,
     build_spell_header,
     build_spell_row,
 )
-from helpers import FakeInteraction, insert_spell, insert_spell_class, link_spell
+from helpers import FakeInteraction
 
 
 def spell(
@@ -53,18 +51,6 @@ def select_of(view: SpellListView) -> SpellSelect:
         if isinstance(item, SpellSelect):
             return item
     raise AssertionError("SpellSelect not found in the view")
-
-
-def followup_content(interaction, index: int = 0) -> str:
-    sent = interaction.followup.sent[index]
-    if "content" in sent["kwargs"]:
-        return sent["kwargs"]["content"]
-    return sent["args"][0]
-
-
-@pytest.fixture
-def cog(make_cog):
-    return make_cog(Spells)
 
 
 class TestBuildSpellRow:
@@ -292,69 +278,3 @@ class TestSpellListNavigationAndOwnership:
         assert interaction.response.messages[0]["args"][0] == (
             "Erro: Apenas o usuário que invocou o comando pode interagir com este menu."
         )
-
-
-class TestListSpellsCommand:
-    async def test_without_character_reports_the_missing_binding(self, cog, interaction):
-        await Spells.list_spells.callback(cog, interaction)
-
-        assert interaction.response.deferred[0]["kwargs"]["ephemeral"] is True
-        assert followup_content(interaction) == (
-            "Erro: Você não possui um personagem ativo atribuído à sua conta."
-        )
-
-    async def test_without_spells_reports_the_empty_registry(self, cog, interaction, character):
-        await Spells.list_spells.callback(cog, interaction)
-
-        assert followup_content(interaction) == (
-            "O personagem Cobaia não possui nenhuma magia cadastrada."
-        )
-
-    async def test_with_spells_sends_the_paginated_view(self, cog, interaction, character, db):
-        class_id = insert_spell_class(db, "Fogo")
-        spell_id = insert_spell(db, name="Bola de Fogo", class_id=class_id)
-        link_spell(db, 1, spell_id, 2)
-
-        await Spells.list_spells.callback(cog, interaction)
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert sent["ephemeral"] is True
-        assert sent["content"] == sent["view"].build_content()
-        assert "Magias" in sent["content"]
-        assert "Bola de Fogo" in sent["content"]
-
-    async def test_master_command_accepts_an_explicit_character(self, cog, interaction, character, db):
-        class_id = insert_spell_class(db, "Água")
-        spell_id = insert_spell(db, name="Cura", class_id=class_id)
-        link_spell(db, 1, spell_id, 1)
-
-        await Spells.master_list_spells.callback(cog, interaction, "1")
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert "Cura" in sent["content"]
-        assert sent["view"].spells[0]["nh"] == 11
-
-    async def test_master_command_rejects_an_invalid_identifier(self, cog, interaction):
-        await Spells.master_list_spells.callback(cog, interaction, "abc")
-
-        assert followup_content(interaction) == (
-            "Erro de processamento: O identificador do personagem fornecido é inválido."
-        )
-
-    async def test_master_command_reports_a_missing_character(self, cog, interaction):
-        await Spells.master_list_spells.callback(cog, interaction, "999")
-
-        assert followup_content(interaction) == (
-            "Erro de consistência: Personagem com ID `999` não foi localizado."
-        )
-
-    async def test_master_command_without_argument_falls_back_to_the_caller(
-        self, cog, interaction, character, db
-    ):
-        class_id = insert_spell_class(db, "Fogo")
-        spell_id = insert_spell(db, name="Fogo Fátuo", class_id=class_id)
-        link_spell(db, 1, spell_id, 0)
-
-        await Spells.master_list_spells.callback(cog, interaction, None)
-
-        assert "Fogo Fátuo" in followup_content(interaction)

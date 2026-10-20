@@ -3,9 +3,17 @@ from utils.dice_mechanics import hdm_dices
 from random import randint
 
 
-def quick_dispute(player_id: int, effective_nh1: int, effective_nh2: int):
+def quick_dispute(
+    player_id: int,
+    effective_nh1: int,
+    effective_nh2: int,
+    connection=None,
+):
     # Deterministic Device Block
-    fate = consume_deterministic_fate(player_id)
+    if connection is None:
+        fate = consume_deterministic_fate(player_id)
+    else:
+        fate = consume_deterministic_fate(player_id, connection)
 
     if fate is not None:
 

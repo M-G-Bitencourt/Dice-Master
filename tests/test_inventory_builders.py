@@ -46,6 +46,7 @@ from utils.db_functions import get_character_inventory_data
 def melee_mode(**overrides) -> dict:
     mode = {
         "mode_name": "Corte",
+        "skill_id": 1,
         "skill_name": "Machado",
         "damage_base": "GeB",
         "damage_modifier": 2,

@@ -1,4 +1,4 @@
-"""View and command tests for cogs/skills.py.
+"""View tests for cogs/skills.py.
 
 Rows, headers, pagination and the detail dropdown are exercised with
 hand-built skill dicts shaped like utils.db_functions.get_character_skills_data.
@@ -9,17 +9,15 @@ database.
 from __future__ import annotations
 
 import discord
-import pytest
 
 import cogs.skills as skills_module
 from cogs.skills import (
-    Skills,
     SkillListView,
     SkillSelect,
     build_skill_header,
     build_skill_row,
 )
-from helpers import FakeInteraction, insert_skill, link_skill
+from helpers import FakeInteraction
 
 
 def skill(
@@ -68,18 +66,6 @@ def button_by_label(view: SkillListView, label: str) -> discord.ui.Button:
         if isinstance(item, discord.ui.Button) and item.label == label:
             return item
     raise AssertionError(f"button {label!r} not found")
-
-
-def followup_content(interaction, index: int = 0) -> str:
-    sent = interaction.followup.sent[index]
-    if "content" in sent["kwargs"]:
-        return sent["kwargs"]["content"]
-    return sent["args"][0]
-
-
-@pytest.fixture
-def cog(make_cog):
-    return make_cog(Skills)
 
 
 class TestBuildSkillRow:
@@ -328,67 +314,3 @@ class TestSkillListNavigation:
         assert interaction.response.messages[0]["args"][0] == (
             "Erro: Apenas o usuário que invocou o comando pode interagir com este menu."
         )
-
-
-class TestListSkillsCommand:
-    async def test_without_character_reports_the_missing_binding(self, cog, interaction):
-        await Skills.list_skills.callback(cog, interaction)
-
-        assert interaction.response.deferred[0]["kwargs"]["ephemeral"] is True
-        assert followup_content(interaction) == (
-            "Erro: Você não possui um personagem ativo atribuído à sua conta."
-        )
-
-    async def test_without_skills_reports_the_empty_registry(self, cog, interaction, character):
-        await Skills.list_skills.callback(cog, interaction)
-
-        assert followup_content(interaction) == (
-            "O personagem Cobaia não possui nenhuma perícia cadastrada."
-        )
-
-    async def test_with_skills_sends_the_paginated_view(self, cog, interaction, character, db):
-        skill_id = insert_skill(db, name="Espada Curta", attribute="DX")
-        link_skill(db, 1, skill_id, 2)
-
-        await Skills.list_skills.callback(cog, interaction)
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert sent["ephemeral"] is True
-        assert sent["content"] == sent["view"].build_content()
-        assert "Perícias" in sent["content"]
-        assert "DX+2" in sent["content"]
-
-    async def test_master_command_accepts_an_explicit_character(self, cog, interaction, character, db):
-        skill_id = insert_skill(db, name="Furtividade", attribute="IQ")
-        link_skill(db, 1, skill_id, 1)
-
-        await Skills.master_list_skills.callback(cog, interaction, "1")
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert "Furtividade" in sent["content"]
-        assert sent["view"].skills[0]["nh"] == 11
-
-    async def test_master_command_rejects_an_invalid_identifier(self, cog, interaction):
-        await Skills.master_list_skills.callback(cog, interaction, "abc")
-
-        assert followup_content(interaction) == (
-            "Erro de processamento: O identificador do personagem fornecido é inválido."
-        )
-
-    async def test_master_command_reports_a_missing_character(self, cog, interaction):
-        await Skills.master_list_skills.callback(cog, interaction, "999")
-
-        assert followup_content(interaction) == (
-            "Erro de consistência: Personagem com ID `999` não foi localizado."
-        )
-
-    async def test_master_command_without_argument_falls_back_to_the_caller(
-        self, cog, interaction, character, db
-    ):
-        skill_id = insert_skill(db, name="Escalada", attribute="DX")
-        link_skill(db, 1, skill_id, 0)
-
-        await Skills.master_list_skills.callback(cog, interaction, None)
-
-        sent = interaction.followup.sent[0]["kwargs"]
-        assert "Escalada" in sent["content"]
