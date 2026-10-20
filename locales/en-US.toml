@@ -1,0 +1,176 @@
+[meta]
+code = "en-US"
+name = "English (US)"
+native_name = "English (US)"
+discord_locale = "en-US"
+aliases = ["en", "en-us", "en_us", "english"]
+
+[catalog.resources]
+hp = "HP"
+fp = "FP"
+er = "ER"
+
+[catalog.attributes]
+st = "ST"
+dx = "DX"
+iq = "IQ"
+ht = "HT"
+per = "Per"
+will = "Will"
+
+[catalog.hit_locations]
+torso = "Torso"
+vitals = "Vitals"
+skull = "Skull"
+eye = "Eye"
+face = "Face"
+neck = "Neck"
+groin = "Groin"
+arm = "Arm"
+leg = "Leg"
+hand = "Hand"
+foot = "Foot"
+
+[catalog.maneuvers]
+normal = "Normal Attack"
+all_out_determined = "All-Out Attack (Determined)"
+all_out_strong = "All-Out Attack (Strong)"
+defensive = "Defensive Attack"
+
+[catalog.damage_types]
+affliction = "Affliction"
+burning = "Burning"
+corrosion = "Corrosion"
+crushing = "Crushing"
+cutting = "Cutting"
+fatigue = "Fatigue"
+impaling = "Impaling"
+piercing_small = "Small Piercing (pi-)"
+piercing = "Piercing (pi)"
+piercing_large = "Large Piercing (pi+)"
+piercing_huge = "Huge Piercing (pi++)"
+special = "Special"
+toxic = "Toxic"
+
+[catalog.effect_types]
+attack = "Attack"
+damage = "Damage"
+defense = "Defense"
+dodge = "Dodge"
+parry = "Parry"
+rd = "DR"
+extra_defense_attempts = "Extra defense attempts"
+extra_defense_uses = "Extra defense uses"
+
+[catalog.body_parts]
+torso = "Torso"
+head = "Head"
+skull = "Skull"
+face = "Face"
+thorax = "Thorax"
+neck = "Neck"
+groin = "Groin"
+arms = "Arms"
+legs = "Legs"
+hands = "Hands"
+feet = "Feet"
+shoulders = "Shoulders"
+upper_arms = "Upper Arms"
+elbows = "Elbows"
+forearms = "Forearms"
+thighs = "Thighs"
+knees = "Knees"
+shins = "Shins"
+abdomen = "Abdomen"
+
+[catalog.encumbrance]
+none = "None"
+light = "Light"
+medium = "Medium"
+heavy = "Heavy"
+extra_heavy = "Extra-Heavy"
+
+[catalog.equipment_badges]
+equipped = "[EQUIPPED]"
+stored = "[STORED]"
+
+[catalog.damage_bases]
+swing = "sw"
+thrust = "th"
+
+[catalog.parry]
+no = "No"
+
+[catalog.health_labels]
+zero_hp = "0 HP"
+death_check = "Death -{multiplier}xHP"
+
+[catalog.health_effects]
+conscious = "conscious"
+unconscious = "unconscious"
+survives = "survives"
+dying = "dying"
+dead = "dead"
+
+[catalog.health_status]
+conscious = "conscious"
+unconscious = "unconscious"
+dying = "dying"
+dead = "dead"
+obliterated = "obliterated"
+
+[catalog.difficulties]
+easy = "Easy"
+medium = "Medium"
+hard = "Hard"
+very_hard = "Very Hard"
+ultra_hard = "Ultra Hard"
+
+[catalog.trait_categories]
+advantage = "Advantage"
+disadvantage = "Disadvantage"
+
+[catalog.schools]
+no_school = "No School"
+
+[catalog.mode_names]
+default = "Default"
+punch = "Punch"
+kick = "Kick"
+
+[catalog.weapon_names]
+brawling = "Brawling"
+unarmed_combat = "Unarmed Combat"
+
+[catalog.fate]
+"0" = "Success"
+"1" = "Failure"
+"2" = "Critical Success"
+"3" = "Critical Failure"
+
+[catalog.condition_names]
+aim = "Aim"
+evaluate = "Evaluate"
+shock = "Shock"
+feint = "Feint"
+
+[catalog.condition_fields]
+aim = "Aim"
+evaluate = "Evaluate"
+shock = "Shock"
+feint = "Feint"
+
+[catalog.help_categories]
+Sheet = "CHARACTER SHEET"
+Skill_tests = "SKILL TESTS"
+Other_tests = "GENERAL TESTS"
+Battle = "COMBAT"
+Combat = "COMBAT"
+Skills = "SKILLS"
+Spells = "SPELLS"
+Traits = "TRAITS"
+Inventory = "INVENTORY"
+Admin = "ADMINISTRATION"
+Help = "HELP"
+Settings = "SETTINGS"
+other = "OTHER"

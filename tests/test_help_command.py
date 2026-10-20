@@ -22,6 +22,7 @@ from cogs.help import (
 )
 from cogs.inventory import Inventory
 from cogs.other_tests import Other_tests
+from cogs.settings import Settings
 from cogs.sheet import Sheet
 from cogs.skill_test import Skill_tests
 from cogs.skills import Skills
@@ -95,9 +96,9 @@ class TestHiddenCommands:
 class TestCatalogContent:
     def test_every_visible_command_is_listed_with_its_description(self):
         commands = [
-            make_command("roll", "Rola dados", "Other_tests"),
-            make_command("atk", "Realiza um ataque", "Battle"),
-            make_command("sheet", "Envia a ficha", "Sheet"),
+            make_command("roll_test", "Rola dados", "Other_tests"),
+            make_command("atk_test", "Realiza um ataque", "Battle"),
+            make_command("sheet_test", "Envia a ficha", "Sheet"),
         ]
 
         text = joined_messages(build_help_messages(commands))
@@ -279,6 +280,7 @@ class TestProductionCatalog:
                 Spells,
                 Traits,
                 Help,
+                Settings,
             ):
                 await bot.add_cog(cog_type(bot))
 

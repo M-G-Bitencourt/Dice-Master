@@ -8,10 +8,17 @@ import discord
 
 from cogs.combat_helpers.combat_embeds import build_panel_embed
 from cogs.combat_helpers.combat_turn import advance_combat_turn
-from cogs.combat_helpers.combat_support import _can_defend, _clamp, _is_gm_user
+from cogs.combat_helpers.combat_support import (
+    _can_defend,
+    _clamp,
+    _friendly_character_error,
+    _is_gm_user,
+)
+from utils.i18n import default_locale, get_locale, locale_context, normalize_locale, t as tr
 from utils.db_functions import (
     close_combat_session,
     get_active_combat_session,
+    get_guild_locale,
     get_character_conditions_by_id,
     get_combat_participants,
     get_pending_attack,
@@ -38,26 +45,26 @@ class DefenseButton(discord.ui.Button):
         await self.view.handle_defense(interaction, self.option)
 
 
-class DefenseAdjustModal(discord.ui.Modal, title="Ajustar defesa"):
+class DefenseAdjustModal(discord.ui.Modal, title="Adjust defense"):
     """Manual defence values for unusual advantages, powers or conditions."""
 
     nh = discord.ui.TextInput(
-        label="NH de defesa",
+        label="Defense skill",
         required=False,
         max_length=4,
-        placeholder="Ex.: 12",
+        placeholder="Example: 12",
     )
     rd = discord.ui.TextInput(
-        label="RD base",
+        label="Base DR",
         required=False,
         max_length=4,
-        placeholder="Vazio usa a RD automática; crânio soma +2",
+        placeholder="Empty uses automatic DR; skull adds +2",
     )
     modifier = discord.ui.TextInput(
-        label="Modificador situacional",
+        label="Situational modifier",
         required=False,
         max_length=4,
-        placeholder="Ex.: +2 ou -2",
+        placeholder="Example: +2 or -2",
     )
 
     def __init__(
@@ -69,8 +76,9 @@ class DefenseAdjustModal(discord.ui.Modal, title="Ajustar defesa"):
         defense_key: str | None = None,
         effect_ids: list[int] | None = None,
         resolve_callback=None,
+        locale: str | None = None,
     ):
-        super().__init__()
+        super().__init__(title=tr("Adjust defense"))
         self.attack_id = attack_id
         self.connection = connection
         self.dm_id = dm_id
@@ -78,8 +86,18 @@ class DefenseAdjustModal(discord.ui.Modal, title="Ajustar defesa"):
         self.defense_key = defense_key
         self.effect_ids = effect_ids or []
         self.resolve_callback = resolve_callback
+        self.locale = locale
+        with locale_context(self.locale or get_locale()):
+            self.title = tr("Adjust defense")
+            self.nh.label = tr("Defense skill")
+            self.rd.label = tr("Base DR")
+            self.modifier.label = tr("Situational modifier")
 
     async def on_submit(self, interaction: discord.Interaction):
+        with locale_context(self.locale or get_locale()):
+            return await self._on_submit(interaction)
+
+    async def _on_submit(self, interaction: discord.Interaction):
         nh_text = str(self.nh.value or "").strip()
         rd_text = str(self.rd.value or "").strip()
         modifier_text = str(self.modifier.value or "").strip()
@@ -90,39 +108,39 @@ class DefenseAdjustModal(discord.ui.Modal, title="Ajustar defesa"):
             modifier = int(modifier_text) if modifier_text else 0
         except ValueError:
             await interaction.response.send_message(
-                "Erro: informe valores inteiros para NH, RD e modificador.",
+                tr("Error: enter integer values for skill, DR, and modifier."),
                 ephemeral=True,
             )
             return
 
         if nh_override is None:
             await interaction.response.send_message(
-                "Erro: informe o NH de defesa para o ajuste manual.",
+                tr("Error: enter the defense skill for manual adjustment."),
                 ephemeral=True,
             )
             return
         if not 0 <= nh_override <= 60:
             await interaction.response.send_message(
-                "Erro: o NH de defesa deve estar entre 0 e 60.",
+                tr("Error: defense skill must be between 0 and 60."),
                 ephemeral=True,
             )
             return
         if rd_override is not None and not -20 <= rd_override <= 50:
             await interaction.response.send_message(
-                "Erro: a RD manual deve estar entre -20 e 50.",
+                tr("Error: manual DR must be between -20 and 50."),
                 ephemeral=True,
             )
             return
         if not -20 <= modifier <= 20:
             await interaction.response.send_message(
-                "Erro: o modificador deve estar entre -20 e +20.",
+                tr("Error: the modifier must be between -20 and +20."),
                 ephemeral=True,
             )
             return
 
         if self.resolve_callback is None:
             await interaction.response.send_message(
-                "Erro: resolução de defesa indisponível.",
+                tr("Error: defense resolution is unavailable."),
                 ephemeral=True,
             )
             return
@@ -131,7 +149,7 @@ class DefenseAdjustModal(discord.ui.Modal, title="Ajustar defesa"):
             self.connection,
             self.attack_id,
             defense_value=nh_override,
-            defense_label="Defesa manual",
+            defense_label=tr("Manual defense"),
             dm_id=self.dm_id,
             nh_override=nh_override,
             rd_override=rd_override,
@@ -156,6 +174,7 @@ class DefenseView(discord.ui.View):
         defenses: list[dict],
         repeat_callback=None,
         resolve_callback=None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=900)
         self.attack_id = attack_id
@@ -166,80 +185,85 @@ class DefenseView(discord.ui.View):
         self.defenses = defenses
         self.repeat_callback = repeat_callback
         self.resolve_callback = resolve_callback
+        self.locale = locale
 
-        for option in defenses:
-            self.add_item(DefenseButton(option))
+        with locale_context(self.locale or get_locale()):
+            for option in defenses:
+                self.add_item(DefenseButton(option))
 
-        waive_button = discord.ui.Button(
-            label="Desistir",
-            style=discord.ButtonStyle.danger,
-        )
-        waive_button.callback = self.handle_waive
-        self.add_item(waive_button)
+            waive_button = discord.ui.Button(
+                label=tr("Waive"),
+                style=discord.ButtonStyle.danger,
+            )
+            waive_button.callback = self.handle_waive
+            self.add_item(waive_button)
 
-        adjust_button = discord.ui.Button(
-            label="Ajustar",
-            style=discord.ButtonStyle.secondary,
-        )
-        adjust_button.callback = self.handle_adjust
-        self.add_item(adjust_button)
+            adjust_button = discord.ui.Button(
+                label=tr("Adjust"),
+                style=discord.ButtonStyle.secondary,
+            )
+            adjust_button.callback = self.handle_adjust
+            self.add_item(adjust_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        pending = get_pending_attack(self.connection, self.attack_id)
-        if pending is None:
-            await interaction.response.send_message(
-                "Erro: este ataque não existe mais.",
-                ephemeral=True,
-            )
-            return False
+        with locale_context(self.locale or get_locale()):
+            pending = get_pending_attack(self.connection, self.attack_id)
+            if pending is None:
+                await interaction.response.send_message(
+                    tr("Error: this attack no longer exists."),
+                    ephemeral=True,
+                )
+                return False
 
-        if not _can_defend(interaction.user, pending, self.dm_id):
-            await interaction.response.send_message(
-                "Erro: apenas o alvo do ataque ou o mestre podem defender.",
-                ephemeral=True,
-            )
-            return False
+            if not _can_defend(interaction.user, pending, self.dm_id):
+                await interaction.response.send_message(
+                    tr("Error: only the attack target or the GM can defend."),
+                    ephemeral=True,
+                )
+                return False
 
-        return True
+            return True
 
     async def handle_defense(
         self, interaction: discord.Interaction, option: dict
     ):
-        if self.resolve_callback is None:
-            await interaction.response.send_message(
-                "Erro: resolução de defesa indisponível.",
-                ephemeral=True,
+        with locale_context(self.locale or get_locale()):
+            if self.resolve_callback is None:
+                await interaction.response.send_message(
+                    tr("Error: defense resolution is unavailable."),
+                    ephemeral=True,
+                )
+                return
+            await self.resolve_callback(
+                interaction,
+                self.connection,
+                self.attack_id,
+                defense_value=option["value"],
+                defense_label=option["label"],
+                dm_id=self.dm_id,
+                defense_key=option.get("key"),
+                effect_ids=option.get("effect_ids"),
+                repeat_callback=self.repeat_callback,
             )
-            return
-        await self.resolve_callback(
-            interaction,
-            self.connection,
-            self.attack_id,
-            defense_value=option["value"],
-            defense_label=option["label"],
-            dm_id=self.dm_id,
-            defense_key=option.get("key"),
-            effect_ids=option.get("effect_ids"),
-            repeat_callback=self.repeat_callback,
-        )
 
     async def handle_waive(self, interaction: discord.Interaction):
-        if self.resolve_callback is None:
-            await interaction.response.send_message(
-                "Erro: resolução de defesa indisponível.",
-                ephemeral=True,
+        with locale_context(self.locale or get_locale()):
+            if self.resolve_callback is None:
+                await interaction.response.send_message(
+                    tr("Error: defense resolution is unavailable."),
+                    ephemeral=True,
+                )
+                return
+            await self.resolve_callback(
+                interaction,
+                self.connection,
+                self.attack_id,
+                defense_value=None,
+                defense_label=tr("Waive"),
+                dm_id=self.dm_id,
+                waive=True,
+                repeat_callback=self.repeat_callback,
             )
-            return
-        await self.resolve_callback(
-            interaction,
-            self.connection,
-            self.attack_id,
-            defense_value=None,
-            defense_label="Desistir",
-            dm_id=self.dm_id,
-            waive=True,
-            repeat_callback=self.repeat_callback,
-        )
 
     async def handle_adjust(self, interaction: discord.Interaction):
         option = self.defenses[0] if self.defenses else None
@@ -252,6 +276,7 @@ class DefenseView(discord.ui.View):
                 defense_key=option.get("key") if option else None,
                 effect_ids=option.get("effect_ids") if option else None,
                 resolve_callback=self.resolve_callback,
+                locale=self.locale,
             )
         )
 
@@ -266,39 +291,42 @@ class NextActionView(discord.ui.View):
         claimed: dict,
         dm_id: int,
         repeat_callback=None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=900)
         self.connection = connection
         self.claimed = claimed
         self.dm_id = dm_id
         self.repeat_callback = repeat_callback
+        self.locale = locale
 
-        if (
-            claimed.get("mode_id") is not None
-            or claimed.get("ranged_weapon_id") is not None
-        ):
-            repeat_button = discord.ui.Button(
-                label="Repetir ataque",
-                style=discord.ButtonStyle.primary,
-            )
-            repeat_button.callback = self.repeat_attack
-            self.add_item(repeat_button)
+        with locale_context(self.locale or get_locale()):
+            if (
+                claimed.get("mode_id") is not None
+                or claimed.get("ranged_weapon_id") is not None
+            ):
+                repeat_button = discord.ui.Button(
+                    label=tr("Repeat attack"),
+                    style=discord.ButtonStyle.primary,
+                )
+                repeat_button.callback = self.repeat_attack
+                self.add_item(repeat_button)
 
-        attack_kind = claimed.get("attack_kind", "melee")
-        if attack_kind == "ranged":
-            aim_button = discord.ui.Button(
-                label="Mirar",
-                style=discord.ButtonStyle.secondary,
-            )
-            aim_button.callback = self.aim
-            self.add_item(aim_button)
-        else:
-            evaluate_button = discord.ui.Button(
-                label="Avaliar",
-                style=discord.ButtonStyle.secondary,
-            )
-            evaluate_button.callback = self.evaluate
-            self.add_item(evaluate_button)
+            attack_kind = claimed.get("attack_kind", "melee")
+            if attack_kind == "ranged":
+                aim_button = discord.ui.Button(
+                    label=tr("Aim"),
+                    style=discord.ButtonStyle.secondary,
+                )
+                aim_button.callback = self.aim
+                self.add_item(aim_button)
+            else:
+                evaluate_button = discord.ui.Button(
+                    label=tr("Evaluate"),
+                    style=discord.ButtonStyle.secondary,
+                )
+                evaluate_button.callback = self.evaluate
+                self.add_item(evaluate_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if _is_gm_user(interaction.user, self.dm_id):
@@ -308,22 +336,30 @@ class NextActionView(discord.ui.View):
         ):
             return True
 
-        await interaction.response.send_message(
-            "Erro: apenas o atacante ou o mestre podem usar estas ações.",
-            ephemeral=True,
-        )
+        with locale_context(self.locale or get_locale()):
+            await interaction.response.send_message(
+                tr("Error: only the attacker or the GM can use these actions."),
+                ephemeral=True,
+            )
         return False
 
     async def repeat_attack(self, interaction: discord.Interaction):
-        if self.repeat_callback is None:
-            await interaction.response.send_message(
-                "Erro: repetição indisponível para este ataque.",
-                ephemeral=True,
-            )
-            return
-        await self.repeat_callback(interaction, self.claimed)
+        with locale_context(self.locale or get_locale()):
+            if self.repeat_callback is None:
+                await interaction.response.send_message(
+                    tr("Error: repetition is unavailable for this attack."),
+                    ephemeral=True,
+                )
+                return
+            await self.repeat_callback(interaction, self.claimed)
 
     async def _apply_maneuver(
+        self, interaction: discord.Interaction, field: str
+    ):
+        with locale_context(self.locale or get_locale()):
+            return await self._apply_maneuver_inner(interaction, field)
+
+    async def _apply_maneuver_inner(
         self, interaction: discord.Interaction, field: str
     ):
         await interaction.response.defer(ephemeral=True)
@@ -346,7 +382,7 @@ class NextActionView(discord.ui.View):
                     aim=min(3, int(conditions["aim"]) + 1),
                     evaluate=0,
                 )
-                message = "Mira preparada para o próximo ataque."
+                message = tr("Aim prepared for the next attack.")
             else:
                 set_character_aim_evaluate(
                     self.connection,
@@ -354,7 +390,7 @@ class NextActionView(discord.ui.View):
                     aim=0,
                     evaluate=min(3, int(conditions["evaluate"]) + 1),
                 )
-                message = "Avaliação preparada para o próximo ataque."
+                message = tr("Evaluation prepared for the next attack.")
 
         await interaction.edit_original_response(view=None)
         await interaction.followup.send(message, ephemeral=True)
@@ -376,46 +412,61 @@ class CombatPanelView(discord.ui.View):
         channel_id: int,
         guild_id: int | None,
         dm_id: int,
+        locale: str | None = None,
     ):
         super().__init__(timeout=None)
         self.connection = connection
         self.channel_id = channel_id
         self.guild_id = guild_id
         self.dm_id = dm_id
+        resolved = normalize_locale(locale) if locale else None
+        if resolved is None and guild_id is not None:
+            try:
+                resolved = normalize_locale(
+                    get_guild_locale(connection, int(guild_id))
+                )
+            except Exception:
+                resolved = None
+        self.locale = resolved or default_locale()
 
-        refresh_button = discord.ui.Button(
-            label="Atualizar",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"combat_panel:{self.channel_id}:refresh",
-        )
-        refresh_button.callback = self.refresh
-        self.add_item(refresh_button)
+        with locale_context(self.locale or get_locale()):
+            refresh_button = discord.ui.Button(
+                label=tr("Refresh"),
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"combat_panel:{self.channel_id}:refresh",
+            )
+            refresh_button.callback = self.refresh
+            self.add_item(refresh_button)
 
-        advance_button = discord.ui.Button(
-            label="Avançar turno",
-            style=discord.ButtonStyle.primary,
-            custom_id=f"combat_panel:{self.channel_id}:advance",
-        )
-        advance_button.callback = self.advance_turn
-        self.add_item(advance_button)
+            advance_button = discord.ui.Button(
+                label=tr("Advance Turn"),
+                style=discord.ButtonStyle.primary,
+                custom_id=f"combat_panel:{self.channel_id}:advance",
+            )
+            advance_button.callback = self.advance_turn
+            self.add_item(advance_button)
 
-        close_button = discord.ui.Button(
-            label="Encerrar",
-            style=discord.ButtonStyle.danger,
-            custom_id=f"combat_panel:{self.channel_id}:close",
-        )
-        close_button.callback = self.close
-        self.add_item(close_button)
+            close_button = discord.ui.Button(
+                label=tr("Close"),
+                style=discord.ButtonStyle.danger,
+                custom_id=f"combat_panel:{self.channel_id}:close",
+            )
+            close_button.callback = self.close
+            self.add_item(close_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return True
 
     async def refresh(self, interaction: discord.Interaction):
+        with locale_context(self.locale or get_locale()):
+            return await self._refresh(interaction)
+
+    async def _refresh(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         session = get_active_combat_session(self.connection, self.channel_id)
         if session is None:
             await interaction.followup.send(
-                "Erro: não existe combate ativo neste canal.",
+                tr("Error: there is no active combat in this channel."),
                 ephemeral=True,
             )
             return
@@ -423,7 +474,7 @@ class CombatPanelView(discord.ui.View):
         channel = interaction.channel
         if channel is None:
             await interaction.followup.send(
-                "Erro: canal do combate não localizado.",
+                tr("Error: combat channel not found."),
                 ephemeral=True,
             )
             return
@@ -448,12 +499,13 @@ class CombatPanelView(discord.ui.View):
             channel_id=self.channel_id,
             guild_id=self.guild_id,
             dm_id=self.dm_id,
+            locale=self.locale,
         )
         try:
             new_message = await channel.send(embed=embed, view=new_view)
         except (discord.HTTPException, discord.Forbidden):
             await interaction.followup.send(
-                "Erro: não foi possível repostar o painel de combate.",
+                tr("Error: could not repost the combat panel."),
                 ephemeral=True,
             )
             return
@@ -488,14 +540,18 @@ class CombatPanelView(discord.ui.View):
 
         if delete_failed:
             await interaction.followup.send(
-                "Painel atualizado, mas não foi possível apagar o painel antigo.",
+                tr("Panel updated, but the old panel could not be deleted."),
                 ephemeral=True,
             )
 
     async def advance_turn(self, interaction: discord.Interaction):
+        with locale_context(self.locale or get_locale()):
+            return await self._advance_turn(interaction)
+
+    async def _advance_turn(self, interaction: discord.Interaction):
         if not _is_gm_user(interaction.user, self.dm_id):
             await interaction.response.send_message(
-                "Erro: apenas o mestre pode avançar o turno.",
+                tr("Error: only the GM can advance the turn."),
                 ephemeral=True,
             )
             return
@@ -507,7 +563,7 @@ class CombatPanelView(discord.ui.View):
             )
         except ValueError as error:
             await interaction.followup.send(
-                f"Erro: {error}",
+                tr("Error: {detail}", detail=_friendly_character_error(error)),
                 ephemeral=True,
             )
             return
@@ -539,17 +595,18 @@ class CombatPanelView(discord.ui.View):
         await interaction.edit_original_response(embed=embed, view=self)
 
     async def close(self, interaction: discord.Interaction):
-        if not _is_gm_user(interaction.user, self.dm_id):
-            await interaction.response.send_message(
-                "Erro: apenas o mestre pode encerrar o combate.",
-                ephemeral=True,
-            )
-            return
+        with locale_context(self.locale or get_locale()):
+            if not _is_gm_user(interaction.user, self.dm_id):
+                await interaction.response.send_message(
+                    tr("Error: only the GM can end the combat."),
+                    ephemeral=True,
+                )
+                return
 
-        await interaction.response.defer()
-        with self.connection:
-            close_combat_session(self.connection, self.channel_id)
-            supersede_pending_attacks(self.connection, self.channel_id)
+            await interaction.response.defer()
+            with self.connection:
+                close_combat_session(self.connection, self.channel_id)
+                supersede_pending_attacks(self.connection, self.channel_id)
 
-        embed = build_panel_embed(None, None, closed=True)
-        await interaction.edit_original_response(embed=embed, view=None)
+            embed = build_panel_embed(None, None, closed=True)
+            await interaction.edit_original_response(embed=embed, view=None)

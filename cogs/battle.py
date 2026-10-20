@@ -7,6 +7,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils.db_functions import get_player_condition, set_player_condition
+from utils.i18n import t as tr
+from utils.locale_service import apply_interaction_locale
 
 
 # Other
@@ -150,16 +152,17 @@ class Battle(commands.Cog):
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
     # Damage Command ------------------------------------------------
-    @app_commands.command(description="Calcula dano de um ataque")
+    @app_commands.command(description="Calculate damage for an attack.")
+    @app_commands.rename(modificador="modifier", atk_type="attack_type")
     @app_commands.describe(
-        st="Força do seu personagem",
-        modificador="Modificador de dano dado pela arma",
-        atk_type="Escoha se é um golpe de ponta ou um golpe em Balanço",
+        st="Your character's Strength.",
+        modificador="Damage modifier from the weapon.",
+        atk_type="Choose thrust or swing damage.",
     )
     @app_commands.choices(
         atk_type=[
-            app_commands.Choice(name="Golpe de Ponta", value=0),
-            app_commands.Choice(name="Golpe em Balanço", value=1),
+            app_commands.Choice(name="Thrust", value=0),
+            app_commands.Choice(name="Swing", value=1),
         ]
     )
     async def damage(
@@ -169,6 +172,7 @@ class Battle(commands.Cog):
         modificador: int,
         atk_type: app_commands.Choice[int],
     ):
+        apply_interaction_locale(interact, self.db_connection)
 
         # Embed
 
@@ -183,17 +187,18 @@ class Battle(commands.Cog):
         damage_embed = discord.Embed()
         signal = "+" if st_mod >= 0 else "-"
 
-        damage_embed.title = "DANO"
+        damage_embed.title = tr("DAMAGE")
         damage_embed.color = discord.Color.brand_red()
-        damage_embed.add_field(name="Força", value=str(st)[:1000], inline=False)
+        damage_embed.add_field(name=tr("Strength"), value=str(st)[:1000], inline=False)
+        attack_label = tr("Thrust") if atk_type.value == 0 else tr("Swing")
         damage_embed.add_field(
-            name="Tipo de Ataque",
-            value=f"{atk_type.name}\n{dice_count}d {signal} {abs(st_mod)}"[:1000],
+            name=tr("Attack Type"),
+            value=f"{attack_label}\n{dice_count}d {signal} {abs(st_mod)}"[:1000],
             inline=False,
         )
         damage_embed.add_field(
-            name="Resultado da Rolagem",
-            value=f"\n`Dados: {dices} = {dice_sum}`\nModificador de Força: {st_mod}\nModificador de Arma: {modificador}\n\n**Total:** {damage_value}"[
+            name=tr("Roll Result"),
+            value=f"\n`{tr('Dice')}: {dices} = {dice_sum}`\n{tr('Strength Modifier')}: {st_mod}\n{tr('Weapon Modifier')}: {modificador}\n\n**{tr('Total')}:** {damage_value}"[
                 :1000
             ],
             inline=False,
@@ -203,9 +208,10 @@ class Battle(commands.Cog):
 
     # Apt (aim command) -------------------------------------------
     @app_commands.command(
-        name="combat_aim", description="Aponta com uma arma de combate a distância"
+        name="combat_aim", description="Aim with a ranged combat weapon."
     )
     async def aim(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=False)
 
         player_id = interaction.user.id
@@ -219,14 +225,17 @@ class Battle(commands.Cog):
 
         set_player_condition(self.db_connection, player_id, "aim", aim_value)
 
-        await interaction.followup.send(f"{aim_value}º Turno apontando.")
+        await interaction.followup.send(
+            tr("Aim turn {turn}.", turn=aim_value)
+        )
 
     # Avaliaar (evaluate command) -------------------------------------------
     @app_commands.command(
         name="combat_evaluate",
-        description="Estuda o oponente para conseguir um bônus na próxima rolagem",
+        description="Evaluate an opponent to gain a bonus on your next roll.",
     )
     async def evaluate(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=False)
 
         player_id = interaction.user.id
@@ -239,7 +248,9 @@ class Battle(commands.Cog):
 
         set_player_condition(self.db_connection, player_id, "evaluate", evaluate_value)
 
-        await interaction.followup.send(f"{evaluate_value}º Turno Avaliando.")
+        await interaction.followup.send(
+            tr("Evaluate turn {turn}.", turn=evaluate_value)
+        )
 
 
 async def setup(bot: commands.Bot):

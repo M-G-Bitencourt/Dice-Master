@@ -72,7 +72,9 @@ def resolve_damage_health(
 
     if old_pv > 0 >= new_pv:
         check = _roll_ht_check("0 PV", ht)
+        check["label_key"] = "zero_hp"
         check["effect"] = "consciente" if check["success"] else "inconsciente"
+        check["effect_key"] = "conscious" if check["success"] else "unconscious"
         conscious = check["success"]
         checks.append(check)
 
@@ -87,33 +89,44 @@ def resolve_damage_health(
         new_multiplier = _death_multiplier(new_pv, max_pv)
         for multiplier in range(old_multiplier + 1, new_multiplier + 1):
             check = _roll_ht_check(f"Morte -{multiplier}xPV", ht)
+            check["label_key"] = "death_check"
+            check["label_params"] = {"multiplier": multiplier}
             checks.append(check)
             if check["success"]:
                 check["effect"] = "sobrevive"
+                check["effect_key"] = "survives"
                 conscious = True
                 continue
             failure_margin = -check["margin"]
             if failure_margin <= 2:
                 check["effect"] = "morrendo"
+                check["effect_key"] = "dying"
                 life_state = "dying"
             else:
                 check["effect"] = "morto"
+                check["effect_key"] = "dead"
                 life_state = "dead"
             conscious = False
             break
 
     if life_state == "obliterated":
         status = "obliterado"
+        status_key = "obliterated"
     elif life_state == "dead":
         status = "morto"
+        status_key = "dead"
     elif life_state == "dying":
         status = "morrendo"
+        status_key = "dying"
     elif checks and not conscious:
         status = "inconsciente"
+        status_key = "unconscious"
     elif checks:
         status = "consciente"
+        status_key = "conscious"
     else:
         status = None
+        status_key = None
 
     return {
         "current_pv": new_pv,
@@ -125,4 +138,5 @@ def resolve_damage_health(
         "conscious": conscious,
         "life_state": life_state,
         "status": status,
+        "status_key": status_key,
     }

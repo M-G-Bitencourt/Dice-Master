@@ -9,6 +9,8 @@ import sqlite3
 from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
 from utils.db_functions import get_character_thumbnail_payload
+from utils.i18n import t as tr
+from utils.locale_service import apply_interaction_locale
 
 
 class Other_tests(commands.Cog):
@@ -25,26 +27,29 @@ class Other_tests(commands.Cog):
 
     # Roll Command ---------------------------------------------------
     @app_commands.command(
-        description="Rola Genericamente um número de dados com algum modiificador"
+        description="Roll a number of d6 and apply a modifier."
     )
+    @app_commands.rename(num_dados="dice_count", modificador="modifier")
     @app_commands.describe(
-        num_dados="Número de dados que serão rolados",
-        modificador="Qualquer modificador que precise ser aplicado",
+        num_dados="Number of dice to roll.",
+        modificador="Modifier applied to the total.",
     )
     async def roll(
         self, interact: discord.Interaction, num_dados: int, modificador: int
     ):
+        apply_interaction_locale(interact, self.db_connection)
+
         dices = [randint(1, 6) for _ in range(num_dados)]
         dice_pool = sum(dices)
 
         # Embed
         roll_embed = discord.Embed()
 
-        roll_embed.title = "ROLAGEM"
+        roll_embed.title = tr("ROLL")
         roll_embed.color = discord.Color.green()
         roll_embed.add_field(
-            name="Rolagem",
-            value=f"`Dados: {dices} = {dice_pool}`\nModificador: {modificador}\n\n**Total:** {dice_pool + modificador}",
+            name=tr("Roll"),
+            value=f"`{tr('Dice')}: {dices} = {dice_pool}`\n{tr('Modifier')}: {modificador}\n\n**{tr('Total')}:** {dice_pool + modificador}",
         )
 
         await interact.response.send_message(embed=roll_embed)
@@ -52,16 +57,18 @@ class Other_tests(commands.Cog):
     # Reaction Test ---------------------------------------------------
     @app_commands.command(
         name="react",
-        description="Executa a rolagem de um teste de reação baseado nas tabelas canônicas do GURPS.",
+        description="Roll a reaction test using the GURPS reaction table.",
     )
     @app_commands.describe(
-        modifier="Soma dos modificadores de reação ativos na entidade"
+        modifier="Sum of active reaction modifiers on the character."
     )
     async def react(self, interaction: discord.Interaction, modifier: int):
         """
         Resolves a GURPS Reaction Test, handling deterministic fate constraints.
         Enforces immediate network deferral to guarantee safety against while-loop execution spikes.
         """
+        apply_interaction_locale(interaction, self.db_connection)
+
         # CRITICAL AXIOM: Securing the network payload token before processing database and RNG loops
         await interaction.response.defer(ephemeral=False)
 
@@ -124,33 +131,33 @@ class Other_tests(commands.Cog):
         react_embed = discord.Embed()
 
         if total_score <= 0:
-            react_embed.title = "REAÇÃO DESASTROSA"
+            react_embed.title = tr("DISASTROUS REACTION")
             react_embed.color = discord.Color.red()
         elif total_score <= 3:
-            react_embed.title = "REAÇÃO MUITO RUIM"
+            react_embed.title = tr("VERY BAD REACTION")
             react_embed.color = discord.Color.red()
         elif total_score <= 6:
-            react_embed.title = "REAÇÃO RUIM"
+            react_embed.title = tr("BAD REACTION")
             react_embed.color = discord.Color.orange()
         elif total_score <= 9:
-            react_embed.title = "REAÇÃO FRACA"
+            react_embed.title = tr("WEAK REACTION")
             react_embed.color = discord.Color.yellow()
         elif total_score <= 12:
-            react_embed.title = "REAÇÃO NEUTRA"
+            react_embed.title = tr("NEUTRAL REACTION")
             react_embed.color = discord.Color.greyple()
         elif total_score <= 15:
-            react_embed.title = "REAÇÃO BOA"
+            react_embed.title = tr("GOOD REACTION")
             react_embed.color = discord.Color.green()
         elif total_score <= 18:
-            react_embed.title = "REAÇÃO MUITO BOA"
+            react_embed.title = tr("VERY GOOD REACTION")
             react_embed.color = discord.Color.green()
         else:
-            react_embed.title = "REAÇÃO EXCELENTE"
+            react_embed.title = tr("EXCELLENT REACTION")
             react_embed.color = discord.Color.blue()
 
         react_embed.add_field(
-            name="Métricas da Rolagem",
-            value=f"`Dados: {dices} = {dice_pool}`\nModificador: `{modifier:+d}`\n\n**Resultado Final: {total_score}**",
+            name=tr("Roll Metrics"),
+            value=f"`{tr('Dice')}: {dices} = {dice_pool}`\n{tr('Modifier')}: `{modifier:+d}`\n\n**{tr('Final Result')}: {total_score}**",
             inline=False,
         )
 
@@ -169,10 +176,11 @@ class Other_tests(commands.Cog):
             await interaction.followup.send(embed=react_embed)
 
     # Panic -----------------------------------------------------------
-    @app_commands.command(description="Realiza uma verificação de Pânico")
+    @app_commands.command(description="Perform a panic check.")
+    @app_commands.rename(vontade="will", modificador="modifier")
     @app_commands.describe(
-        vontade="Seu Valor de Vontade",
-        modificador="Soma dos modificadores de dificuldade",
+        vontade="Your Will score.",
+        modificador="Sum of difficulty modifiers.",
     )
     async def panic(
         self, interaction: discord.Interaction, vontade: int, modificador: int
@@ -181,6 +189,8 @@ class Other_tests(commands.Cog):
         Resolves a GURPS Fright Check, evaluating panic table thresholds upon failure.
         Enforces immediate network token preservation to prevent interface timeouts.
         """
+        apply_interaction_locale(interaction, self.db_connection)
+
         # CRITICAL AXIOM: Immediate network token preservation.
         # Extends the interaction lifecycle to 15 minutes before any processing occurs.
         await interaction.response.defer(ephemeral=False)
@@ -230,7 +240,7 @@ class Other_tests(commands.Cog):
         # POST-ROLL PRESENTATION PIPELINE
         # ==========================================
         if is_success:
-            panic_embed.title = "RESISTIU AO PÂNICO"
+            panic_embed.title = tr("RESISTED PANIC")
             panic_embed.color = (
                 discord.Color.gold() if is_critical_success else discord.Color.green()
             )
@@ -239,20 +249,20 @@ class Other_tests(commands.Cog):
             margin_of_victory = effective_sl - dice_pool
 
             panic_embed.add_field(
-                name="Parada de Dados", value=f"`{dices} = {dice_pool}`", inline=False
+                name=tr("Dice Pool"), value=f"`{dices} = {dice_pool}`", inline=False
             )
             panic_embed.add_field(
-                name="Nível de Vontade",
-                value=f"NH Básico: {vontade}\nModificador: {modificador}\n`NH Efetivo: {effective_sl}` -> {vontade} {modificador_sign} {abs(modificador)}",
+                name=tr("Will Level"),
+                value=f"{tr('Base Skill')}: {vontade}\n{tr('Modifier')}: {modificador}\n`{tr('Effective Skill')}: {effective_sl}` -> {vontade} {modificador_sign} {abs(modificador)}",
                 inline=False,
             )
             panic_embed.add_field(
-                name="Margem de Vitória",
+                name=tr("Margin of Victory"),
                 value=f"`{effective_sl} - {dice_pool} = {margin_of_victory}`",
                 inline=False,
             )
         else:
-            panic_embed.title = "SUCUMBIU AO PÂNICO"
+            panic_embed.title = tr("SUCCUMBED TO PANIC")
             panic_embed.color = (
                 discord.Color.brand_red()
                 if is_critical_failure
@@ -267,23 +277,25 @@ class Other_tests(commands.Cog):
             # GURPS Axiom: Critical failures automatically add a flat +10 penalty to the panic roll
             if is_critical_failure:
                 panic_value = panic_dice_pool + failure_margin + 10
-                critical_notice = (
-                    "\n**[FALHA CRÍTICA: +10 adicionado ao resultado final!]**"
+                critical_notice = "\n" + tr(
+                    "**[CRITICAL FAILURE: +10 added to the final result!]**"
                 )
             else:
                 panic_value = panic_dice_pool + failure_margin
                 critical_notice = ""
 
-            panic_embed.description = f"A tabela de consequências de pânico encontra-se no Módulo Básico, pág. 361.{critical_notice}"
+            panic_embed.description = tr(
+                "The panic consequence table is in the Basic Set, p. 361."
+            ) + critical_notice
 
             panic_embed.add_field(
-                name="Métricas de Fracasso",
-                value=f"Dados do Teste: `{dices} = {dice_pool}`\nMargem de Fracasso: `{failure_margin}`",
+                name=tr("Failure Metrics"),
+                value=f"{tr('Test Dice')}: `{dices} = {dice_pool}`\n{tr('Failure Margin')}: `{failure_margin}`",
                 inline=False,
             )
             panic_embed.add_field(
-                name="Rolagem na Tabela de Pânicos",
-                value=f"Dados: `{panic_dices} = {panic_dice_pool}`\n**Valor Final do Pânico:** `{panic_value}`",
+                name=tr("Panic Table Roll"),
+                value=f"{tr('Dice')}: `{panic_dices} = {panic_dice_pool}`\n**{tr('Final Panic Value')}:** `{panic_value}`",
                 inline=False,
             )
 

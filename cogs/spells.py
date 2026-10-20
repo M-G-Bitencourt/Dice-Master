@@ -4,6 +4,7 @@ from pathlib import Path
 
 import sqlite3
 
+from utils.i18n import catalog_label_from_value, get_locale, locale_context, t as tr
 from utils.ansi import (
     ACCENT_COLOR,
     LABEL_COLOR,
@@ -29,7 +30,7 @@ def build_spell_row(spell: dict) -> str:
 
     return (
         f"{ansi(pad(name, 26), NEUTRAL_COLOR)}  "
-        f"{ansi('NH', LABEL_COLOR)} {pad(ansi(nh_display, SUCCESS_COLOR), 5)} "
+        f"{ansi(tr('Skill'), LABEL_COLOR)} {pad(ansi(nh_display, SUCCESS_COLOR), 5)} "
         f"{ansi(cost_display, WARN_COLOR)}"
     )
 
@@ -42,13 +43,13 @@ def build_spell_header(spell: dict) -> str:
     difficulty_display = f"{spell['attribute']} / {spell['difficulty']}"
 
     lines = [
-        f"{ansi('NH', LABEL_COLOR)} {ansi(nh_display, SUCCESS_COLOR)} | "
-        f"{ansi('Custo', LABEL_COLOR)} {ansi(cost_display, WARN_COLOR)}",
-        f"{ansi('Nível Relativo', LABEL_COLOR)} {ansi(relative_display, ACCENT_COLOR)} | "
-        f"{ansi('Dificuldade', LABEL_COLOR)} {ansi(difficulty_display, NEUTRAL_COLOR)}",
+        f"{ansi(tr('Skill'), LABEL_COLOR)} {ansi(nh_display, SUCCESS_COLOR)} | "
+        f"{ansi(tr('Cost'), LABEL_COLOR)} {ansi(cost_display, WARN_COLOR)}",
+        f"{ansi(tr('Relative Level'), LABEL_COLOR)} {ansi(relative_display, ACCENT_COLOR)} | "
+        f"{ansi(tr('Difficulty'), LABEL_COLOR)} {ansi(difficulty_display, NEUTRAL_COLOR)}",
     ]
 
-    return code_block(lines) + "\n**Descrição e Regras:**\n"
+    return code_block(lines) + f"\n**{tr('Description and Rules:')}**\n"
 
 
 class SpellSelect(discord.ui.Select):
@@ -59,12 +60,12 @@ class SpellSelect(discord.ui.Select):
             discord.SelectOption(
                 label=m["name"][:100],
                 value=str(m["spell_id"]),
-                description=f"NH {m['nh']} | Custo: {m['cost']} {m['resource']} | {m['attribute']}/{m['difficulty']}"[:100],
+                description=f"{tr('Skill')} {m['nh']} | {tr('Cost')}: {m['cost']} {m['resource']} | {m['attribute']}/{m['difficulty']}"[:100],
             )
             for m in spells_chunk
         ]
         super().__init__(
-            placeholder="Selecione uma magia para inspecionar...",
+            placeholder=tr("Select a spell to inspect..."),
             min_values=1,
             max_values=1,
             options=options,
@@ -73,41 +74,43 @@ class SpellSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         """Updates the interaction message with the full rules embed of the selected spell."""
         view: SpellListView = self.view  # type: ignore
-        selected_id = int(self.values[0])
-        selected_spell = view.spells_by_id.get(selected_id)
+        with locale_context(view.locale or get_locale()):
+            selected_id = int(self.values[0])
+            selected_spell = view.spells_by_id.get(selected_id)
 
-        if not selected_spell:
-            await interaction.response.send_message(
-                "Erro: Magia não localizada no registro atual.", ephemeral=True
+            if not selected_spell:
+                await interaction.response.send_message(
+                    tr("Error: spell not found in the current record."),
+                    ephemeral=True,
+                )
+                return
+
+            desc_raw = (
+                selected_spell["description"]
+                if selected_spell["description"]
+                != "Nenhuma descrição detalhada disponível."
+                else tr("No detailed description available.")
             )
-            return
 
-        desc_raw = (
-            selected_spell["description"]
-            or "Nenhuma descrição detalhada disponível."
-        )
+            header = build_spell_header(selected_spell)
 
-        # Header containing essential metrics at the top of the card
-        header = build_spell_header(selected_spell)
+            max_desc_len = 4000 - len(header)
+            if len(desc_raw) > max_desc_len:
+                desc_text = desc_raw[: max_desc_len - 3] + "..."
+            else:
+                desc_text = desc_raw
 
-        # The embed description allows up to 4000 characters (vs 1000 in a field)
-        max_desc_len = 4000 - len(header)
-        if len(desc_raw) > max_desc_len:
-            desc_text = desc_raw[: max_desc_len - 3] + "..."
-        else:
-            desc_text = desc_raw
+            embed = discord.Embed(
+                title=tr("Spell: {name}", name=selected_spell["name"])[:256],
+                description=header + desc_text,
+                color=discord.Color.purple(),
+            )
 
-        embed = discord.Embed(
-            title=f"Magia: {selected_spell['name']}"[:256],
-            description=header + desc_text,
-            color=discord.Color.purple(),
-        )
-
-        await interaction.response.edit_message(
-            content=view.build_content(),
-            embed=embed,
-            view=view,
-        )
+            await interaction.response.edit_message(
+                content=view.build_content(),
+                embed=embed,
+                view=view,
+            )
 
 
 class SpellListView(discord.ui.View):
@@ -119,12 +122,14 @@ class SpellListView(discord.ui.View):
         spells: list[dict],
         author_id: int,
         back_callback=None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=None)
         self.character_name = character_name
         self.spells = spells
         self.author_id = author_id
         self.back_callback = back_callback
+        self.locale = locale
         self.spells_by_id = {m["spell_id"]: m for m in spells}
 
         rows = []
@@ -144,33 +149,48 @@ class SpellListView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Restricts interaction to the user who invoked the command."""
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "Erro: Apenas o usuário que invocou o comando pode interagir com este menu.",
-                ephemeral=True,
-            )
-            return False
-        return True
+        with locale_context(self.locale or get_locale()):
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    tr("Error: only the user who invoked this command can interact with this menu."),
+                    ephemeral=True,
+                )
+                return False
+            return True
 
     def build_content(self) -> str:
         """Renders the colored ANSI list for the current page, grouped by school."""
-        page_rows = self.pages[self.current_page]
+        with locale_context(self.locale or get_locale()):
+            page_rows = self.pages[self.current_page]
 
-        lines = [f"# Magias: **{sanitize(self.character_name)}**"]
-        if self.total_pages > 1:
-            lines.append(f"*Página {self.current_page + 1} de {self.total_pages}*")
-        lines.append("---")
+            lines = [tr("# Spells: **{character}**", character=sanitize(self.character_name))]
+            if self.total_pages > 1:
+                lines.append(
+                    tr(
+                        "*Page {current} of {total}*",
+                        current=self.current_page + 1,
+                        total=self.total_pages,
+                    )
+                )
+            lines.append("---")
 
-        block_lines = [line for _, line in page_rows]
-        if page_rows and page_rows[0][0] is not None:
-            first_school = page_rows[0][0].get("school", "Sem Escola")
-            block_lines.insert(0, ansi(first_school, LABEL_COLOR))
+            block_lines = [line for _, line in page_rows]
+            if page_rows and page_rows[0][0] is not None:
+                first = page_rows[0][0]
+                school_name = first.get("school") or "Sem Escola"
+                if school_name == "Sem Escola":
+                    school_label = tr("No School")
+                else:
+                    school_label = catalog_label_from_value("schools", school_name)
+                block_lines.insert(0, ansi(school_label, LABEL_COLOR))
 
-        lines.append(code_block(block_lines))
-        lines.append("---")
-        lines.append("*Selecione uma magia no menu abaixo para inspecionar seus detalhes.*")
+            lines.append(code_block(block_lines))
+            lines.append("---")
+            lines.append(
+                f"*{tr('Select a spell from the menu below to inspect its details.')}*"
+            )
 
-        return clamp_code_block("\n".join(lines), 1900)
+            return clamp_code_block("\n".join(lines), 1900)
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
@@ -180,39 +200,40 @@ class SpellListView(discord.ui.View):
             spell for spell, _ in self.pages[self.current_page] if spell is not None
         ]
 
-        self.add_item(SpellSelect(page_spells))
+        with locale_context(self.locale or get_locale()):
+            self.add_item(SpellSelect(page_spells))
 
-        if self.total_pages > 1:
-            prev_button = discord.ui.Button(
-                label="< Anterior",
-                style=discord.ButtonStyle.secondary,
-                disabled=(self.current_page == 0),
-            )
-            prev_button.callback = self.previous_page
-            self.add_item(prev_button)
+            if self.total_pages > 1:
+                prev_button = discord.ui.Button(
+                    label=f"< {tr('Previous')}",
+                    style=discord.ButtonStyle.secondary,
+                    disabled=(self.current_page == 0),
+                )
+                prev_button.callback = self.previous_page
+                self.add_item(prev_button)
 
-            indicator_button = discord.ui.Button(
-                label=f"{self.current_page + 1} / {self.total_pages}",
-                style=discord.ButtonStyle.primary,
-                disabled=True,
-            )
-            self.add_item(indicator_button)
+                indicator_button = discord.ui.Button(
+                    label=f"{self.current_page + 1} / {self.total_pages}",
+                    style=discord.ButtonStyle.primary,
+                    disabled=True,
+                )
+                self.add_item(indicator_button)
 
-            next_button = discord.ui.Button(
-                label="Próxima >",
-                style=discord.ButtonStyle.secondary,
-                disabled=(self.current_page >= self.total_pages - 1),
-            )
-            next_button.callback = self.next_page
-            self.add_item(next_button)
+                next_button = discord.ui.Button(
+                    label=f"{tr('Next')} >",
+                    style=discord.ButtonStyle.secondary,
+                    disabled=(self.current_page >= self.total_pages - 1),
+                )
+                next_button.callback = self.next_page
+                self.add_item(next_button)
 
-        if self.back_callback is not None:
-            back_button = discord.ui.Button(
-                label="Voltar",
-                style=discord.ButtonStyle.secondary,
-            )
-            back_button.callback = self.go_back
-            self.add_item(back_button)
+            if self.back_callback is not None:
+                back_button = discord.ui.Button(
+                    label=tr("Back"),
+                    style=discord.ButtonStyle.secondary,
+                )
+                back_button.callback = self.go_back
+                self.add_item(back_button)
 
     async def go_back(self, interaction: discord.Interaction):
         """Delegates navigation back to the parent view when configured."""

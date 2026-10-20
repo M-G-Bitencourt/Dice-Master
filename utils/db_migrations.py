@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 _MIGRATION_1 = """
@@ -787,6 +787,19 @@ def _apply_migration_10(connection: sqlite3.Connection) -> None:
         )
 
 
+def _apply_migration_11(connection: sqlite3.Connection) -> None:
+    """Add per-guild language preferences."""
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS "guild_settings" (
+            "guild_id" INTEGER PRIMARY KEY,
+            "locale" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+
+
 def apply_migrations(connection: sqlite3.Connection) -> int:
     """Apply every pending migration and return the resulting schema version."""
     current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
@@ -853,5 +866,11 @@ def apply_migrations(connection: sqlite3.Connection) -> int:
         connection.execute("PRAGMA user_version = 10")
         connection.commit()
         current_version = 10
+
+    if current_version < 11:
+        _apply_migration_11(connection)
+        connection.execute("PRAGMA user_version = 11")
+        connection.commit()
+        current_version = 11
 
     return current_version

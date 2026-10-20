@@ -4,6 +4,7 @@ from pathlib import Path
 
 import sqlite3
 
+from utils.i18n import catalog_label_from_value, get_locale, locale_context, t as tr
 from utils.ansi import (
     DANGER_COLOR,
     LABEL_COLOR,
@@ -40,7 +41,7 @@ def build_trait_header(trait: dict) -> str:
     cost_color = SUCCESS_COLOR if cost >= 0 else DANGER_COLOR
 
     return code_block(
-        [f"{ansi('Custo', LABEL_COLOR)} {ansi(cost_display, cost_color)}"]
+        [f"{ansi(tr('Cost'), LABEL_COLOR)} {ansi(cost_display, cost_color)}"]
     )
 
 
@@ -52,12 +53,12 @@ class TraitSelect(discord.ui.Select):
             discord.SelectOption(
                 label=t["name"][:100],
                 value=t["trait_key"],
-                description=f"{t['category']} | Custo: {t['cost']} pts"[:100],
+                description=f"{catalog_label_from_value('trait_categories', t['category'])} | {tr('Cost')}: {t['cost']} pts"[:100],
             )
             for t in traits_chunk
         ]
         super().__init__(
-            placeholder="Selecione uma característica para inspecionar...",
+            placeholder=tr("Select a trait to inspect..."),
             min_values=1,
             max_values=1,
             options=options,
@@ -66,49 +67,58 @@ class TraitSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         """Updates the interaction message with the full rules embed of the selected trait."""
         view: TraitListView = self.view  # type: ignore
-        selected_key = self.values[0]
-        selected_trait = view.traits_by_key.get(selected_key)
+        with locale_context(view.locale or get_locale()):
+            selected_key = self.values[0]
+            selected_trait = view.traits_by_key.get(selected_key)
 
-        if not selected_trait:
-            await interaction.response.send_message(
-                "Erro: Característica não localizada no registro atual.", ephemeral=True
+            if not selected_trait:
+                await interaction.response.send_message(
+                    tr("Error: trait not found in the current record."),
+                    ephemeral=True,
+                )
+                return
+
+            desc_raw = (
+                selected_trait["description"]
+                if selected_trait["description"]
+                != "Nenhuma descrição detalhada disponível."
+                else tr("No detailed description available.")
             )
-            return
 
-        desc_raw = (
-            selected_trait["description"]
-            or "Nenhuma descrição detalhada disponível."
-        )
+            notes_raw = (selected_trait["notes"] or "").strip()
+            notes_text = (
+                notes_raw[:1000]
+                if notes_raw
+                else tr("No notes recorded.")
+            )
 
-        notes_raw = (selected_trait["notes"] or "").strip()
-        notes_text = notes_raw[:1000] if notes_raw else "Nenhuma observação registrada."
+            header = (
+                build_trait_header(selected_trait)
+                + f"\n**{tr('Notes:')}** {notes_text}\n\n"
+                + f"**{tr('Description and Rules:')}**\n"
+            )
 
-        # Header containing essential point cost and per-character notes
-        header = (
-            build_trait_header(selected_trait)
-            + f"\n**Observações:** {notes_text}\n\n"
-            + "**Descrição e Regras:**\n"
-        )
+            max_desc_len = 4000 - len(header)
+            if len(desc_raw) > max_desc_len:
+                desc_text = desc_raw[: max_desc_len - 3] + "..."
+            else:
+                desc_text = desc_raw
 
-        # The embed description allows up to 4000 characters (vs 1000 in a field)
-        max_desc_len = 4000 - len(header)
-        if len(desc_raw) > max_desc_len:
-            desc_text = desc_raw[: max_desc_len - 3] + "..."
-        else:
-            desc_text = desc_raw
+            category = catalog_label_from_value(
+                "trait_categories", selected_trait["category"]
+            )
+            is_advantage = selected_trait["category"] == "Vantagem"
+            embed = discord.Embed(
+                title=f"{category}: {selected_trait['name']}"[:256],
+                description=header + desc_text,
+                color=discord.Color.gold() if is_advantage else discord.Color.dark_red(),
+            )
 
-        is_advantage = selected_trait["category"] == "Vantagem"
-        embed = discord.Embed(
-            title=f"{selected_trait['category']}: {selected_trait['name']}"[:256],
-            description=header + desc_text,
-            color=discord.Color.gold() if is_advantage else discord.Color.dark_red(),
-        )
-
-        await interaction.response.edit_message(
-            content=view.build_content(),
-            embed=embed,
-            view=view,
-        )
+            await interaction.response.edit_message(
+                content=view.build_content(),
+                embed=embed,
+                view=view,
+            )
 
 
 class TraitListView(discord.ui.View):
@@ -120,12 +130,14 @@ class TraitListView(discord.ui.View):
         traits: list[dict],
         author_id: int,
         back_callback=None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=None)
         self.character_name = character_name
         self.traits = traits
         self.author_id = author_id
         self.back_callback = back_callback
+        self.locale = locale
         self.traits_by_key = {t["trait_key"]: t for t in traits}
 
         rows = []
@@ -144,34 +156,50 @@ class TraitListView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Restricts interaction to the user who invoked the command."""
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "Erro: Apenas o usuário que invocou o comando pode interagir com este menu.",
-                ephemeral=True,
-            )
-            return False
-        return True
+        with locale_context(self.locale or get_locale()):
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    tr("Error: only the user who invoked this command can interact with this menu."),
+                    ephemeral=True,
+                )
+                return False
+            return True
 
     def build_content(self) -> str:
         """Renders the colored ANSI list for the current page, grouped by category."""
-        page_rows = self.pages[self.current_page]
+        with locale_context(self.locale or get_locale()):
+            page_rows = self.pages[self.current_page]
 
-        lines = [f"# Vantagens e Desvantagens: **{sanitize(self.character_name)}**"]
-        if self.total_pages > 1:
-            lines.append(f"*Página {self.current_page + 1} de {self.total_pages}*")
-        lines.append("---")
+            lines = [
+                tr(
+                    "# Advantages and Disadvantages: **{character}**",
+                    character=sanitize(self.character_name),
+                )
+            ]
+            if self.total_pages > 1:
+                lines.append(
+                    tr(
+                        "*Page {current} of {total}*",
+                        current=self.current_page + 1,
+                        total=self.total_pages,
+                    )
+                )
+            lines.append("---")
 
-        block_lines = [line for _, line in page_rows]
-        if page_rows and page_rows[0][0] is not None:
-            block_lines.insert(
-                0, ansi(page_rows[0][0]["category"].upper(), LABEL_COLOR)
+            block_lines = [line for _, line in page_rows]
+            if page_rows and page_rows[0][0] is not None:
+                category = catalog_label_from_value(
+                    "trait_categories", page_rows[0][0]["category"]
+                )
+                block_lines.insert(0, ansi(category.upper(), LABEL_COLOR))
+
+            lines.append(code_block(block_lines))
+            lines.append("---")
+            lines.append(
+                f"*{tr('Select a trait from the menu below to inspect its details.')}*"
             )
 
-        lines.append(code_block(block_lines))
-        lines.append("---")
-        lines.append("*Selecione uma característica no menu abaixo para inspecionar seus detalhes.*")
-
-        return clamp_code_block("\n".join(lines), 1900)
+            return clamp_code_block("\n".join(lines), 1900)
 
     def update_components(self):
         """Refreshes the active components based on the current page slice."""
@@ -181,39 +209,40 @@ class TraitListView(discord.ui.View):
             trait for trait, _ in self.pages[self.current_page] if trait is not None
         ]
 
-        self.add_item(TraitSelect(page_traits))
+        with locale_context(self.locale or get_locale()):
+            self.add_item(TraitSelect(page_traits))
 
-        if self.total_pages > 1:
-            prev_button = discord.ui.Button(
-                label="< Anterior",
-                style=discord.ButtonStyle.secondary,
-                disabled=(self.current_page == 0),
-            )
-            prev_button.callback = self.previous_page
-            self.add_item(prev_button)
+            if self.total_pages > 1:
+                prev_button = discord.ui.Button(
+                    label=f"< {tr('Previous')}",
+                    style=discord.ButtonStyle.secondary,
+                    disabled=(self.current_page == 0),
+                )
+                prev_button.callback = self.previous_page
+                self.add_item(prev_button)
 
-            indicator_button = discord.ui.Button(
-                label=f"{self.current_page + 1} / {self.total_pages}",
-                style=discord.ButtonStyle.primary,
-                disabled=True,
-            )
-            self.add_item(indicator_button)
+                indicator_button = discord.ui.Button(
+                    label=f"{self.current_page + 1} / {self.total_pages}",
+                    style=discord.ButtonStyle.primary,
+                    disabled=True,
+                )
+                self.add_item(indicator_button)
 
-            next_button = discord.ui.Button(
-                label="Próxima >",
-                style=discord.ButtonStyle.secondary,
-                disabled=(self.current_page >= self.total_pages - 1),
-            )
-            next_button.callback = self.next_page
-            self.add_item(next_button)
+                next_button = discord.ui.Button(
+                    label=f"{tr('Next')} >",
+                    style=discord.ButtonStyle.secondary,
+                    disabled=(self.current_page >= self.total_pages - 1),
+                )
+                next_button.callback = self.next_page
+                self.add_item(next_button)
 
-        if self.back_callback is not None:
-            back_button = discord.ui.Button(
-                label="Voltar",
-                style=discord.ButtonStyle.secondary,
-            )
-            back_button.callback = self.go_back
-            self.add_item(back_button)
+            if self.back_callback is not None:
+                back_button = discord.ui.Button(
+                    label=tr("Back"),
+                    style=discord.ButtonStyle.secondary,
+                )
+                back_button.callback = self.go_back
+                self.add_item(back_button)
 
     async def go_back(self, interaction: discord.Interaction):
         """Delegates navigation back to the parent view when configured."""

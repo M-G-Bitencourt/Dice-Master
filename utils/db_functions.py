@@ -14,6 +14,45 @@ VALID_COLUMNS = {
 }  # Valid structural columns to prevent unauthorized SQL string injection
 
 
+def get_guild_locale(
+    connection: sqlite3.Connection, guild_id: int
+) -> str | None:
+    """Return the stored language for one guild, if any."""
+    row = connection.execute(
+        "SELECT locale FROM guild_settings WHERE guild_id = ?",
+        (int(guild_id),),
+    ).fetchone()
+    return str(row[0]) if row is not None and row[0] else None
+
+
+def set_guild_locale(
+    connection: sqlite3.Connection, guild_id: int, locale: str
+) -> None:
+    """Persist the language used by one guild."""
+    connection.execute(
+        """
+        INSERT INTO guild_settings (guild_id, locale)
+        VALUES (?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            locale = excluded.locale,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (int(guild_id), str(locale)),
+    )
+    connection.commit()
+
+
+def clear_guild_locale(
+    connection: sqlite3.Connection, guild_id: int
+) -> None:
+    """Remove the guild language override."""
+    connection.execute(
+        "DELETE FROM guild_settings WHERE guild_id = ?",
+        (int(guild_id),),
+    )
+    connection.commit()
+
+
 def _resolve_character_id(connection: sqlite3.Connection, player_id: int) -> int:
     """
     Internal helper to map the Discord player_id (owner_id) to the internal character_id.

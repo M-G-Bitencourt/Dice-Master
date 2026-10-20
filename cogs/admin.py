@@ -6,6 +6,8 @@ from pathlib import Path
 
 
 from utils.ansi import code_block, resource_bar
+from utils.i18n import catalog_label, t as tr
+from utils.locale_service import apply_interaction_locale
 from utils.db_functions import set_character_resource
 from utils.db_functions import get_character_profile
 from utils.db_functions import get_character_thumbnail_by_id
@@ -42,19 +44,19 @@ class Admin(commands.Cog):
             raise ValueError(f"Configuration Malformation: {error}")
 
     @app_commands.command(
-        name="hdm", description="Um comando feito para testar o código e debug"
+        name="hdm", description="Debug command used to force the next roll outcome."
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        player="O jogador que terá o teste alterado",
-        fate="Escolha de qual será o próximo resultado do usuário",
+        player="Player whose next test will be changed.",
+        fate="Next result forced for the player.",
     )
     @app_commands.choices(
         fate=[
-            app_commands.Choice(name="Sucesso", value=0),
-            app_commands.Choice(name="Fracasso", value=1),
-            app_commands.Choice(name="Sucesso Decisivo", value=2),
-            app_commands.Choice(name="Falha Crítica", value=3),
+            app_commands.Choice(name="Success", value=0),
+            app_commands.Choice(name="Failure", value=1),
+            app_commands.Choice(name="Critical Success", value=2),
+            app_commands.Choice(name="Critical Failure", value=3),
         ]
     )
     async def deterministic_mock_command(
@@ -63,10 +65,12 @@ class Admin(commands.Cog):
         player: discord.Member,
         fate: app_commands.Choice[int],
     ):
+        apply_interaction_locale(interact, self.db_connection)
+
         # State validation using the pre-loaded instance attribute
         if interact.user.id != self.designated_dm_id:
             await interact.response.send_message(
-                "Erro. Você não tem permissão para usar os comandos de Debug",
+                tr("Error. You do not have permission to use debug commands."),
                 ephemeral=True,
             )
             return
@@ -91,33 +95,40 @@ class Admin(commands.Cog):
 
         except sqlite3.Error as database_exception:
             await interact.response.send_message(
-                f"Erro de processamento: falha estrutural no banco de dados. {database_exception}",
+                tr(
+                    "Processing error: structural database failure. {detail}",
+                    detail=database_exception,
+                ),
                 ephemeral=True,
             )
             return
 
         await interact.response.send_message(
-            content=f"A próxima rolagem de {player.mention} será {fate.name}",
+            content=tr(
+                "The next roll for {player} will be {fate}.",
+                player=player.mention,
+                fate=catalog_label("fate", str(fate.value)),
+            ),
             ephemeral=True,
         )
 
     # manage_character_resource_pool --------------------------------------------
     @app_commands.command(
         name="manage_character_resource_pool",
-        description="Permite editar o PV o PF e a RE dos jogadores",
+        description="Edit a player's HP, FP, and ER.",
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
         resource=[
-            app_commands.Choice(name="pv", value="hp"),
-            app_commands.Choice(name="pf", value="fp"),
-            app_commands.Choice(name="er", value="er"),
+            app_commands.Choice(name="HP", value="hp"),
+            app_commands.Choice(name="FP", value="fp"),
+            app_commands.Choice(name="ER", value="er"),
         ]
     )
     @app_commands.describe(
-        player="O jogador que terá os recursos alterados",
-        resource="O recurso que será alterado",
-        value="O valor que será somado ou subtraído",
+        player="Player whose resources will be changed.",
+        resource="Resource to change.",
+        value="Value added to or subtracted from the resource.",
     )
     async def manage_character_resource_pool(
         self,
@@ -126,6 +137,8 @@ class Admin(commands.Cog):
         resource: app_commands.Choice[str],
         value: int,
     ):
+        apply_interaction_locale(interact, self.db_connection)
+
         # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
         await interact.response.defer(ephemeral=False)
 
@@ -136,7 +149,9 @@ class Admin(commands.Cog):
         try:
             character_data = get_character_profile(self.db_connection, target_player_id)
         except ValueError as e:
-            await interact.followup.send(f"Erro de processamento: {e}")
+            await interact.followup.send(
+                tr("Processing error: {detail}", detail=e)
+            )
             return
 
         character_name = character_data["name"]
@@ -166,27 +181,29 @@ class Admin(commands.Cog):
         er_current = new_value if resource_key == "er" else character_data["current_er"]
 
         transaction_embed = discord.Embed(
-            title="Alteração do Mestre", color=discord.Color.purple()
+            title=tr("GM Adjustment"), color=discord.Color.purple()
         )
 
         transaction_embed.add_field(
-            name="Balanço da Mutação",
-            value=(
-                f"Personagem: `{character_name}`\n"
-                f"Recurso Afetado: `{resource.name.upper()}`\n"
-                f"Modificador Aplicado: `{modifier_sign}{value}`\n"
-                f"Transição de Estado: `{current_value}` -> `{new_value}`"
+            name=tr("Mutation Balance"),
+            value=tr(
+                "Character: `{character}`\nAffected Resource: `{resource}`\nApplied Modifier: `{modifier}`\nState Transition: `{current}` -> `{new}`",
+                character=character_name,
+                resource=catalog_label("resources", resource.value).upper(),
+                modifier=f"{modifier_sign}{value}",
+                current=current_value,
+                new=new_value,
             ),
             inline=False,
         )
 
         transaction_embed.add_field(
-            name="Estado Atual",
+            name=tr("Current State"),
             value=code_block(
                 [
-                    resource_bar("PV", int(pv_current), int(max_pv)),
-                    resource_bar("PF", int(pf_current), int(max_pf)),
-                    resource_bar("ER", int(er_current), int(max_er)),
+                    resource_bar(catalog_label("resources", "hp"), int(pv_current), int(max_pv)),
+                    resource_bar(catalog_label("resources", "fp"), int(pf_current), int(max_pf)),
+                    resource_bar(catalog_label("resources", "er"), int(er_current), int(max_er)),
                 ]
             ),
             inline=False,
@@ -198,15 +215,17 @@ class Admin(commands.Cog):
     # restore_character_resources
     @app_commands.command(
         name="restore_character_resources",
-        description="Restaura incondicionalmente todos os recursos vitais aos seus tetos estruturais máximos",
+        description="Unconditionally restore all vital resources to their maximum caps.",
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
-        player="O jogador cujo personagem receberá a restauração absoluta"
+        player="Player whose character will be fully restored."
     )
     async def restore_character_resources(
         self, interact: discord.Interaction, player: discord.Member
     ):
+        apply_interaction_locale(interact, self.db_connection)
+
         # 1. IMMEDIATE DEFERRAL: Extending the temporal execution limit to 15 minutes
         await interact.response.defer(ephemeral=False)
 
@@ -216,7 +235,9 @@ class Admin(commands.Cog):
         try:
             character_data = get_character_profile(self.db_connection, target_player_id)
         except ValueError as e:
-            await interact.followup.send(f"Erro de processamento: {e}")
+            await interact.followup.send(
+                tr("Processing error: {detail}", detail=e)
+            )
             return
 
         character_name = character_data["name"]
@@ -238,29 +259,36 @@ class Admin(commands.Cog):
 
         # 6. UI Presentation Pipeline
         restoration_embed = discord.Embed(
-            title="Restauração Estrutural Absoluta",
-            description=f"Os fluxos vitais do personagem pertencente ao indivíduo {player.mention} foram compulsoriamente elevados aos seus limites sistêmicos.",
+            title=tr("Absolute Structural Restoration"),
+            description=tr(
+                "The vital flows of the character belonging to {player} were forcibly raised to their systemic limits.",
+                player=player.mention,
+            ),
             color=discord.Color.brand_green(),
         )
 
         restoration_embed.add_field(
-            name="Balanço da Mutação",
-            value=(
-                f"Personagem: `{character_name}`\n\n"
-                f"**PV (Hit Points):** `{old_pv}` -> `{max_pv}`\n"
-                f"**PF (Fatigue Points):** `{old_pf}` -> `{max_pf}`\n"
-                f"**ER (Energy Reserve):** `{old_er}` -> `{max_er}`"
+            name=tr("Mutation Balance"),
+            value=tr(
+                "Character: `{character}`\n\n**HP (Hit Points):** `{old_hp}` -> `{max_hp}`\n**FP (Fatigue Points):** `{old_fp}` -> `{max_fp}`\n**ER (Energy Reserve):** `{old_er}` -> `{max_er}`",
+                character=character_name,
+                old_hp=old_pv,
+                max_hp=max_pv,
+                old_fp=old_pf,
+                max_fp=max_pf,
+                old_er=old_er,
+                max_er=max_er,
             ),
             inline=False,
         )
 
         restoration_embed.add_field(
-            name="Estado Restaurado",
+            name=tr("Restored State"),
             value=code_block(
                 [
-                    resource_bar("PV", int(max_pv), int(max_pv)),
-                    resource_bar("PF", int(max_pf), int(max_pf)),
-                    resource_bar("ER", int(max_er), int(max_er)),
+                    resource_bar(catalog_label("resources", "hp"), int(max_pv), int(max_pv)),
+                    resource_bar(catalog_label("resources", "fp"), int(max_pf), int(max_pf)),
+                    resource_bar(catalog_label("resources", "er"), int(max_er), int(max_er)),
                 ]
             ),
             inline=False,
@@ -303,11 +331,12 @@ class Admin(commands.Cog):
 
     @app_commands.command(
         name="switch_character",
-        description="Transfere o controle do seu usuário para um novo personagem.",
+        description="Transfer your active character to another character.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.describe(character="O nome do personagem que você deseja assumir.")
+    @app_commands.describe(character="Name of the character you want to assume.")
     async def switch_character(self, interaction: discord.Interaction, character: str):
+        apply_interaction_locale(interaction, self.db_connection)
         target_player_id = interaction.user.id
 
         # Casting the string ID back to an integer for relational integrity
@@ -315,7 +344,7 @@ class Admin(commands.Cog):
             new_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem é inválido.",
+                tr("Processing error: invalid character identifier."),
                 ephemeral=True,
             )
             return
@@ -349,12 +378,16 @@ class Admin(commands.Cog):
             "SELECT name FROM characters WHERE character_id = ?", (new_character_id,)
         )
         row = cursor.fetchone()
-        new_character_name = row[0] if row else "Entidade Desconhecida"
+        new_character_name = row[0] if row else tr("Unknown Entity")
 
         # Tactical UI Response
         transference_embed = discord.Embed(
-            title="Sincronização de Avatar Concluída",
-            description=f"{interaction.user.mention} agora está jogando com **{new_character_name}**.",
+            title=tr("Avatar Synchronization Complete"),
+            description=tr(
+                "{user} is now playing **{character}**.",
+                user=interaction.user.mention,
+                character=new_character_name,
+            ),
             color=discord.Color.teal(),
         )
 
@@ -363,11 +396,11 @@ class Admin(commands.Cog):
     # manage_xp
     @app_commands.command(
         name="manage_xp",
-        description="Adiciona ou remove pontos de experiência (current_points) de um personagem.",
+        description="Add or remove character points from a character.",
     )
     @app_commands.describe(
-        character="Selecione o personagem pelo nome.",
-        points="Quantidade de pontos (ex: 5 para adicionar, -3 para remover/gastar).",
+        character="Select the character by name.",
+        points="Point amount (for example 5 to add or -3 to remove).",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.default_permissions(administrator=True)
@@ -375,6 +408,7 @@ class Admin(commands.Cog):
         self, interaction: discord.Interaction, character: str, points: int
     ):
         """Modifies a character's available points/XP atomically within the database layer."""
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=True)
 
         # 1. Parse and validate the target character primary key
@@ -382,7 +416,7 @@ class Admin(commands.Cog):
             target_character_id = int(character)
         except ValueError:
             await interaction.followup.send(
-                "[ERRO] **Erro de processamento:** O identificador do personagem fornecido é inválido.",
+                tr("[ERROR] **Processing error:** the supplied character identifier is invalid."),
                 ephemeral=True,
             )
             return
@@ -396,7 +430,10 @@ class Admin(commands.Cog):
 
         if row is None:
             await interaction.followup.send(
-                f"[ERRO] **Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{target_character_id}`.",
+                tr(
+                    "[ERROR] **Consistency error:** no entity was found under ID `{character_id}`.",
+                    character_id=target_character_id,
+                ),
                 ephemeral=True,
             )
             return
@@ -415,21 +452,31 @@ class Admin(commands.Cog):
         # 3. Assemble confirmation embed
         is_addition = points >= 0
         xp_embed = discord.Embed(
-            title=f"AJUSTE DE PONTOS (XP): {character_name}",
+            title=tr("POINT ADJUSTMENT (XP): {character}", character=character_name),
             color=discord.Color.green() if is_addition else discord.Color.red(),
         )
 
-        transaction_type = "Concessão (+XP)" if is_addition else "Dedução (-XP)"
+        transaction_type = (
+            tr("Grant (+XP)") if is_addition else tr("Deduction (-XP)")
+        )
 
         xp_embed.add_field(
-            name="Operação Homologada",
-            value=f"Tipo: `{transaction_type}`\nAjuste: `{points:+d} pts`",
+            name=tr("Approved Operation"),
+            value=tr(
+                "Type: `{type}`\nAdjustment: `{points:+d} pts`",
+                type=transaction_type,
+                points=points,
+            ),
             inline=False,
         )
 
         xp_embed.add_field(
-            name="Demonstrativo de Pontos",
-            value=f"Anterior: `{previous_points} pts`\nAtual: `{updated_points} pts`",
+            name=tr("Points Breakdown"),
+            value=tr(
+                "Previous: `{previous} pts`\nCurrent: `{current} pts`",
+                previous=previous_points,
+                current=updated_points,
+            ),
             inline=False,
         )
 
@@ -454,21 +501,21 @@ class Admin(commands.Cog):
     # manage_next_turn_conditions -----------------------------------------
     @app_commands.command(
         name="manage_next_turn_conditions",
-        description="Permite gerenciar as condições de próximo turno",
+        description="Manage a character's next-turn conditions.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.choices(
         condition=[
-            app_commands.Choice(name="Apontar", value="aim"),
-            app_commands.Choice(name="Avaliar", value="evaluate"),
-            app_commands.Choice(name="Choque", value="shock"),
-            app_commands.Choice(name="Finta", value="feint"),
+            app_commands.Choice(name="Aim", value="aim"),
+            app_commands.Choice(name="Evaluate", value="evaluate"),
+            app_commands.Choice(name="Shock", value="shock"),
+            app_commands.Choice(name="Feint", value="feint"),
         ]
     )
     @app_commands.describe(
-        character="O personagem que sofrerá a intervenção tática",
-        condition="Condição que será alterada",
-        value="Valor que será atribuído à condição",
+        character="Character that will receive the tactical change.",
+        condition="Condition that will be changed.",
+        value="New value assigned to the condition.",
     )
     @app_commands.default_permissions(administrator=True)
     async def manage_next_turn_conditions(
@@ -478,12 +525,14 @@ class Admin(commands.Cog):
         condition: app_commands.Choice[str],
         value: int,
     ):
+        apply_interaction_locale(interaction, self.db_connection)
+
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                tr("Processing error: the supplied character identifier is invalid."),
                 ephemeral=True,
             )
             return
@@ -500,7 +549,7 @@ class Admin(commands.Cog):
 
         if row is None:
             await interaction.response.send_message(
-                "Erro de processamento: Personagem não encontrado.",
+                tr("Processing error: character not found."),
                 ephemeral=True,
             )
             return
@@ -521,16 +570,21 @@ class Admin(commands.Cog):
 
         # UI Presentation Pipeline
         tactical_embed = discord.Embed(
-            title="Mudança do Mestre Nas Condições de Próximo Turno",
-            description=f"**{target_character_name}** teve suas condições de próximo turno alteradas.",
+            title=tr("GM Change to Next-Turn Conditions"),
+            description=tr(
+                "**{character}** had their next-turn conditions changed.",
+                character=target_character_name,
+            ),
             color=discord.Color.dark_red(),
         )
 
         tactical_embed.add_field(
-            name="Parâmetro Afetado", value=f"`{condition.name.upper()}`", inline=True
+            name=tr("Affected Parameter"),
+            value=f"`{catalog_label('condition_names', condition.value).upper()}`",
+            inline=True,
         )
         tactical_embed.add_field(
-            name="Novo Valor Alocado", value=f"`{value}`", inline=True
+            name=tr("New Assigned Value"), value=f"`{value}`", inline=True
         )
 
         await interaction.response.send_message(embed=tactical_embed)
@@ -538,20 +592,22 @@ class Admin(commands.Cog):
     # clear_next_turn_conditions --------------------------------------------
     @app_commands.command(
         name="clear_next_turn_conditions",
-        description="Purga absolutamente todas as condições de próximo turno de um personagem, zerando-as.",
+        description="Clear all next-turn conditions for a character.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.describe(character="O personagem que terá suas condições obliteradas")
+    @app_commands.describe(character="Character whose conditions will be cleared.")
     @app_commands.default_permissions(administrator=True)
     async def clear_next_turn_conditions(
         self, interaction: discord.Interaction, character: str
     ):
+        apply_interaction_locale(interaction, self.db_connection)
+
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                tr("Processing error: the supplied character identifier is invalid."),
                 ephemeral=True,
             )
             return
@@ -567,7 +623,7 @@ class Admin(commands.Cog):
 
         if row is None:
             await interaction.response.send_message(
-                "Erro de processamento: Personagem não encontrado.",
+                tr("Processing error: character not found."),
                 ephemeral=True,
             )
             return
@@ -591,8 +647,11 @@ class Admin(commands.Cog):
 
         # UI Presentation Pipeline
         tactical_embed = discord.Embed(
-            title="Purgação de Estado Tático",
-            description=f"Todas as variáveis de combate para o próximo turno de **{target_character_name}** foram matematicamente reduzidas ao zero absoluto.",
+            title=tr("Tactical State Purge"),
+            description=tr(
+                "All combat variables for **{character}**'s next turn were reduced to absolute zero.",
+                character=target_character_name,
+            ),
             color=discord.Color.light_grey(),
         )
 
@@ -601,21 +660,23 @@ class Admin(commands.Cog):
     # view_next_turn_conditions ----------------------------------------------
     @app_commands.command(
         name="view_next_turn_conditions",
-        description="Exibe analiticamente as condições de próximo turno vigentes de um personagem.",
+        description="View a character's current next-turn conditions.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.describe(
-        character="O personagem cujas condições operacionais serão inspecionadas"
+        character="Character whose conditions will be inspected."
     )
     async def view_next_turn_conditions(
         self, interaction: discord.Interaction, character: str
     ):
+        apply_interaction_locale(interaction, self.db_connection)
+
         # Casting the string ID originating from the autocomplete payload back to an integer
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.response.send_message(
-                "Erro de processamento: O identificador do personagem fornecido é inválido.",
+                tr("Processing error: the supplied character identifier is invalid."),
                 ephemeral=True,
             )
             return
@@ -636,7 +697,7 @@ class Admin(commands.Cog):
 
         if not row:
             await interaction.response.send_message(
-                "Erro de processamento: A entidade especificada não foi localizada na matriz fundacional.",
+                tr("Processing error: the specified entity was not found."),
                 ephemeral=True,
             )
             return
@@ -651,19 +712,29 @@ class Admin(commands.Cog):
 
         # UI Presentation Pipeline
         inspection_embed = discord.Embed(
-            title=f"Diagnóstico de Estado Tático — {character_name}",
+            title=tr("Tactical State Diagnosis - {character}", character=character_name),
             color=discord.Color.blue(),
         )
 
-        inspection_embed.add_field(name="Apontar (Aim)", value=f"`{aim}`", inline=True)
         inspection_embed.add_field(
-            name="Avaliar (Evaluate)", value=f"`{evaluate}`", inline=True
+            name=catalog_label("condition_fields", "aim"),
+            value=f"`{aim}`",
+            inline=True,
         )
         inspection_embed.add_field(
-            name="Choque (Shock)", value=f"`{shock}`", inline=True
+            name=catalog_label("condition_fields", "evaluate"),
+            value=f"`{evaluate}`",
+            inline=True,
         )
         inspection_embed.add_field(
-            name="Finta (Feint)", value=f"`{feint}`", inline=True
+            name=catalog_label("condition_fields", "shock"),
+            value=f"`{shock}`",
+            inline=True,
+        )
+        inspection_embed.add_field(
+            name=catalog_label("condition_fields", "feint"),
+            value=f"`{feint}`",
+            inline=True,
         )
 
         await interaction.response.send_message(embed=inspection_embed)

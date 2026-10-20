@@ -339,6 +339,11 @@ CREATE TABLE "combat_log" (
 );
 CREATE INDEX "idx_combat_log_session"
     ON "combat_log" ("session_id", "log_id");
+CREATE TABLE "guild_settings" (
+    "guild_id" INTEGER PRIMARY KEY,
+    "locale" TEXT NOT NULL,
+    "updated_at" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE "armor_materials" (
     "material_id" INTEGER PRIMARY KEY AUTOINCREMENT,
     "name" TEXT NOT NULL,                 -- Ex: 'Couro Médio', 'Cota de Malha Pesada', 'Placas Média'
@@ -485,4 +490,4 @@ CREATE TABLE "character_disadvantages" (
 	FOREIGN KEY("disadvantage_id") REFERENCES "disadvantages"("disadvantage_id") ON DELETE CASCADE
 );
 
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;

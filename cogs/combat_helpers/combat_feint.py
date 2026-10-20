@@ -7,6 +7,7 @@ import discord
 from cogs.combat_helpers.combat_embeds import _build_feint_embed
 from cogs.combat_helpers.combat_rules import best_melee_skill
 from cogs.combat_helpers.combat_support import _friendly_character_error
+from utils.i18n import t as tr
 from utils.db_functions import (
     add_combat_log,
     clear_character_conditions,
@@ -35,19 +36,19 @@ async def perform_feint(
 
     if nh_manual is not None and not 0 <= nh_manual <= 60:
         await interaction.followup.send(
-            "Erro: o NH da finta deve estar entre 0 e 60.",
+            tr("Error: feint skill must be between 0 and 60."),
             ephemeral=True,
         )
         return
     if defesa is not None and not 0 <= defesa <= 60:
         await interaction.followup.send(
-            "Erro: o NH de resistência deve estar entre 0 e 60.",
+            tr("Error: resistance skill must be between 0 and 60."),
             ephemeral=True,
         )
         return
     if modificador is not None and not -20 <= modificador <= 20:
         await interaction.followup.send(
-            "Erro: o modificador de finta deve estar entre -20 e +20.",
+            tr("Error: the feint modifier must be between -20 and +20."),
             ephemeral=True,
         )
         return
@@ -58,7 +59,7 @@ async def perform_feint(
         )
         target_id = int(alvo)
         if target_id == actor_id:
-            raise ValueError("O personagem não pode fintar a si mesmo.")
+            raise ValueError("A character cannot feint themselves.")
         actor_profile = get_character_profile_by_id(
             cog.db_connection, actor_id
         )
@@ -70,14 +71,14 @@ async def perform_feint(
         )
     except (ValueError, TypeError) as error:
         await interaction.followup.send(
-            f"Erro: {_friendly_character_error(error)}",
+            tr("Error: {detail}", detail=_friendly_character_error(error)),
             ephemeral=True,
         )
         return
 
     if actor_data is None:
         await interaction.followup.send(
-            "Erro: o personagem não possui perícias de combate.",
+            tr("Error: the character has no combat skills."),
             ephemeral=True,
         )
         return
@@ -87,8 +88,9 @@ async def perform_feint(
     )
     if session is None:
         await interaction.followup.send(
-            "Erro: não existe combate ativo neste canal. "
-            "Use `/combat_enter` para participar.",
+            tr(
+                "Error: there is no active combat in this channel. Use `/combat_enter` to join."
+            ),
             ephemeral=True,
         )
         return
@@ -104,8 +106,9 @@ async def perform_feint(
         is None
     ):
         await interaction.followup.send(
-            "Erro: atacante e alvo precisam estar no combate. "
-            "Use `/combat_enter` para participar.",
+            tr(
+                "Error: attacker and target must be in the combat. Use `/combat_enter` to join."
+            ),
             ephemeral=True,
         )
         return
@@ -114,7 +117,7 @@ async def perform_feint(
         cog.db_connection, interaction.channel_id
     ) is not None:
         await interaction.followup.send(
-            "Erro: resolva o ataque pendente antes de fintar.",
+            tr("Error: resolve the pending attack before feinting."),
             ephemeral=True,
         )
         return
@@ -124,8 +127,9 @@ async def perform_feint(
         active_id is None or int(active_id) != actor_id
     ):
         await interaction.followup.send(
-            "Erro: não é o turno deste personagem. "
-            "Use `/combat_next_turn` para avançar o turno.",
+            tr(
+                "Error: it is not this character's turn. Use `/combat_next_turn` to advance the turn."
+            ),
             ephemeral=True,
         )
         return
@@ -133,7 +137,7 @@ async def perform_feint(
     skill = cog._find_skill_by_id(actor_data, pericia)
     if pericia is not None and skill is None:
         await interaction.followup.send(
-            "Erro: a perícia selecionada não pertence ao personagem.",
+            tr("Error: the selected skill does not belong to the character."),
             ephemeral=True,
         )
         return
@@ -143,7 +147,7 @@ async def perform_feint(
             skill = best_melee_skill(actor_data)
         if skill is None:
             await interaction.followup.send(
-                "Erro: informe uma perícia ou um NH manual para a finta.",
+                tr("Error: provide a skill or a manual skill level for the feint."),
                 ephemeral=True,
             )
             return
@@ -219,12 +223,17 @@ async def perform_feint(
             target_character_id=target_id,
             value=feint_value,
             description=(
-                f"{actor_profile['name']} fintou "
-                f"{target_profile['name']} (penalidade {feint_value})."
+                tr(
+                    "{actor} feinted {target} (penalty {penalty}).",
+                    actor=actor_profile["name"],
+                    target=target_profile["name"],
+                    penalty=feint_value,
+                )
                 if success
-                else (
-                    f"{actor_profile['name']} tentou fintar "
-                    f"{target_profile['name']} sem sucesso."
+                else tr(
+                    "{actor} tried to feint {target} without success.",
+                    actor=actor_profile["name"],
+                    target=target_profile["name"],
                 )
             ),
         )

@@ -9,6 +9,8 @@ import sqlite3
 from pathlib import Path
 
 from utils.db_migrations import apply_migrations
+from utils.discord_translator import DiceMasterTranslator
+from utils.i18n import configure_default_locale
 
 # ===============================================================
 
@@ -16,6 +18,11 @@ from utils.db_migrations import apply_migrations
 # Configparser --------------------------------------------------
 config = configparser.ConfigParser()  # init
 config.read("config.ini")  # Definition of the configuration file
+configure_default_locale(
+    config["BOT"].get("DefaultLanguage", None)
+    if config.has_section("BOT")
+    else None
+)
 
 
 # Bot Class
@@ -52,6 +59,8 @@ class DiceMasterBot(commands.Bot):
         """
         Load extensions strictly inside the setup_hook, NEVER in on_ready.
         """
+        await self.tree.set_translator(DiceMasterTranslator())
+
         extensions = [
             "cogs.battle",
             "cogs.combat",
@@ -63,7 +72,8 @@ class DiceMasterBot(commands.Bot):
             "cogs.inventory",
             "cogs.spells",
             "cogs.traits",
-            "cogs.help"
+            "cogs.help",
+            "cogs.settings",
             ]
 
         for extension in extensions:

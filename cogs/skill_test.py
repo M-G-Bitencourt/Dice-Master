@@ -10,6 +10,8 @@ from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
 from utils.test_mechanics import quick_dispute
 from utils.db_functions import get_character_thumbnail_payload
+from utils.i18n import t as tr
+from utils.locale_service import apply_interaction_locale
 
 
 class Skill_tests(commands.Cog):
@@ -25,15 +27,18 @@ class Skill_tests(commands.Cog):
         self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
     # Test Command
-    @app_commands.command(description="Realiza os testes de Habilidade")
+    @app_commands.command(description="Perform a skill test.")
+    @app_commands.rename(nh="skill_level")
     @app_commands.describe(
-        nh="Seu Nível de Habilidade na perícia",
+        nh="Your effective skill level.",
     )
     async def test(self, interaction: discord.Interaction, nh: int):
         """
         Resolves a foundational GURPS 3d6 success test against an effective skill level.
         Enforces immediate network deferral to shield the execution window against transaction latency.
         """
+        apply_interaction_locale(interaction, self.db_connection)
+
         # CRITICAL AXIOM: Instant network token preservation to prevent 3-second timeouts
         await interaction.response.defer(ephemeral=False)
 
@@ -82,27 +87,27 @@ class Skill_tests(commands.Cog):
         # INTERFACE CORE STYLING ROUTING
         # ==========================================
         if is_critical_failure:
-            test_embed.title = "FALHA CRÍTICA!"
+            test_embed.title = tr("CRITICAL FAILURE!")
             test_embed.color = discord.Color.brand_red()
         elif is_success:
             if is_critical_success:
-                test_embed.title = "SUCESSO DECISIVO!"
+                test_embed.title = tr("CRITICAL SUCCESS!")
                 test_embed.color = discord.Color.gold()
             else:
-                test_embed.title = "SUCESSO!"
+                test_embed.title = tr("SUCCESS!")
                 test_embed.color = discord.Color.green()
         else:
-            test_embed.title = "FALHA"
+            test_embed.title = tr("FAILURE")
             test_embed.color = discord.Color.red()
 
         # Construction of the presentation embed matrix
         test_embed.add_field(
-            name="Parada de Dados", value=f"`{dices} = {dice_pool}`", inline=False
+            name=tr("Dice Pool"), value=f"`{dices} = {dice_pool}`", inline=False
         )
 
         test_embed.add_field(
-            name="Nível de Habilidade",
-            value=f"`NH Efetivo: {effective_sl}`",
+            name=tr("Skill Level"),
+            value=f"`{tr('Effective Skill')}: {effective_sl}`",
             inline=False,
         )
 
@@ -110,14 +115,14 @@ class Skill_tests(commands.Cog):
         if is_success:
             margin_of_victory = effective_sl - dice_pool
             test_embed.add_field(
-                name="Margem de Vitória",
+                name=tr("Margin of Victory"),
                 value=f"`{effective_sl} - {dice_pool} = {margin_of_victory}`",
                 inline=False,
             )
         else:
             margin_of_defeat = dice_pool - effective_sl
             test_embed.add_field(
-                name="Margem de Derrota",
+                name=tr("Margin of Defeat"),
                 value=f"`{dice_pool} - {effective_sl} = {margin_of_defeat}`",
                 inline=False,
             )
@@ -137,10 +142,11 @@ class Skill_tests(commands.Cog):
             await interaction.followup.send(embed=test_embed)
 
     # qkd Command
-    @app_commands.command(description="Realiza uma disputá Rápida de habilidades")
+    @app_commands.command(description="Resolve a quick contest and return the winner.")
+    @app_commands.rename(nh1="attacker_skill", nh2="defender_skill")
     @app_commands.describe(
-        nh1="Seu NH",
-        nh2="Nh do seu adversário",
+        nh1="Your skill level.",
+        nh2="Your opponent's skill level.",
     )
     async def qkd(
         self,
@@ -152,6 +158,8 @@ class Skill_tests(commands.Cog):
         Resolves a generic GURPS Quick Contest between two effective skill levels.
         Enforces immediate network deferral to shield against quick_dispute execution latency.
         """
+        apply_interaction_locale(interaction, self.db_connection)
+
         # CRITICAL AXIOM: Instant network token preservation to prevent 3-second timeouts
         await interaction.response.defer(ephemeral=False)
 
@@ -180,61 +188,61 @@ class Skill_tests(commands.Cog):
         # CONTEST RESOLUTION STATE MACHINE
         # ==========================================
         if success_roll1 is True and success_roll2 is False:
-            qkd_embed.title = "SUCESSO POR ROLAGEM!"
-            qkd_embed.description = (
-                "Você obteve um sucesso no teste e seu oponente um fracasso."
+            qkd_embed.title = tr("SUCCESS BY ROLL!")
+            qkd_embed.description = tr(
+                "You succeeded on the test and your opponent failed."
             )
             qkd_embed.color = discord.Color.green()
 
         elif success_roll1 is False and success_roll2 is True:
-            qkd_embed.title = "FRACASSO POR ROLAGEM!"
-            qkd_embed.description = (
-                "Você obteve um fracasso no teste e seu oponente um sucesso."
+            qkd_embed.title = tr("FAILURE BY ROLL!")
+            qkd_embed.description = tr(
+                "You failed the test and your opponent succeeded."
             )
             qkd_embed.color = discord.Color.red()
 
         elif margin1 > margin2:
-            qkd_embed.title = "SUCESSO POR MARGEM DE TESTE!"
+            qkd_embed.title = tr("SUCCESS BY MARGIN!")
             qkd_embed.color = discord.Color.green()
-            qkd_embed.description = "Resultado decidido pela margem do teste."
+            qkd_embed.description = tr("The result was decided by the test margin.")
 
         elif margin1 == margin2:
-            qkd_embed.title = "EMPATE!"
+            qkd_embed.title = tr("TIE!")
             qkd_embed.color = discord.Color.dark_gray()
-            qkd_embed.description = (
-                "A disputa terminou em um equilíbrio absoluto de margens."
+            qkd_embed.description = tr(
+                "The contest ended in an exact tie of margins."
             )
 
         else:
-            qkd_embed.title = "FRACASSO POR MARGEM DE TESTE!"
+            qkd_embed.title = tr("FAILURE BY MARGIN!")
             qkd_embed.color = discord.Color.red()
-            qkd_embed.description = "Resultado decidido pela margem do teste."
+            qkd_embed.description = tr("The result was decided by the test margin.")
 
         # Generating dynamic signs for presentation cleanliness
         margin_difference = margin1 - margin2
 
         qkd_embed.add_field(
-            name="Você",
+            name=tr("You"),
             value=(
-                f"`Dados: {dices1} = {dice_pool1}`\n"
-                f"`NH Efetivo: {effective_sl1}`\n"
-                f"Sucesso: {'Sim' if success_roll1 else 'Não'}\n"
-                f"`Margem: {margin1}`"
+                f"`{tr('Dice')}: {dices1} = {dice_pool1}`\n"
+                f"`{tr('Effective Skill')}: {effective_sl1}`\n"
+                f"{tr('Success')}: {tr('Yes') if success_roll1 else tr('No')}\n"
+                f"`{tr('Margin')}: {margin1}`"
             ),
             inline=False,
         )
         qkd_embed.add_field(
-            name="Oponente",
+            name=tr("Opponent"),
             value=(
-                f"`Dados: {dices2} = {dice_pool2}`\n"
-                f"`NH Efetivo: {effective_sl2}`\n"
-                f"Sucesso: {'Sim' if success_roll2 else 'Não'}\n"
-                f"`Margem: {margin2}`"
+                f"`{tr('Dice')}: {dices2} = {dice_pool2}`\n"
+                f"`{tr('Effective Skill')}: {effective_sl2}`\n"
+                f"{tr('Success')}: {tr('Yes') if success_roll2 else tr('No')}\n"
+                f"`{tr('Margin')}: {margin2}`"
             ),
             inline=False,
         )
         qkd_embed.add_field(
-            name="Diferença das Margens de Sucesso",
+            name=tr("Margin Difference"),
             value=f"`{margin1} - ({margin2}) = {margin_difference}`",
             inline=False,
         )

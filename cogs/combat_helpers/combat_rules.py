@@ -15,6 +15,7 @@ from utils.combat import (
     parse_parry_modifier,
 )
 from utils.db_functions import record_participant_use
+from utils.i18n import t as tr
 
 
 def _consume_effects(
@@ -137,8 +138,12 @@ def _defense_options(
             {
                 "kind": "dodge",
                 "key": "dodge",
-                "label": f"Esquivar {dodge}"
-                + (f" ({dodge_uses} usos)" if dodge_uses > 1 else ""),
+                "label": tr("Dodge {value}", value=dodge)
+                + (
+                    " " + tr("({uses} uses)", uses=dodge_uses)
+                    if dodge_uses > 1
+                    else ""
+                ),
                 "value": dodge,
                 "uses_remaining": dodge_uses,
                 "effect_ids": defense_effect_ids
@@ -181,9 +186,13 @@ def _defense_options(
         if uses <= 0:
             continue
 
-        label = f"Aparar {mode['weapon_name']} {value}"
+        label = tr(
+            "Parry {weapon} {value}",
+            weapon=mode["weapon_name"],
+            value=value,
+        )
         if uses > 1:
-            label += f" ({uses} usos)"
+            label += " " + tr("({uses} uses)", uses=uses)
         dedupe_key = (label.casefold(), value)
         if dedupe_key in seen:
             continue

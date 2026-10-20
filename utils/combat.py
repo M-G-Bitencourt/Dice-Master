@@ -7,17 +7,17 @@ from typing import Any, Iterable
 
 
 HIT_LOCATIONS: dict[int, dict[str, Any]] = {
-    0: {"name": "Tronco", "penalty": 0, "armor_body_part": "Tronco"},
-    1: {"name": "Órgãos Vitais", "penalty": -3, "armor_body_part": "Tórax"},
-    2: {"name": "Crânio", "penalty": -7, "armor_body_part": "Crânio"},
-    3: {"name": "Olho", "penalty": -9, "armor_body_part": "Crânio"},
-    4: {"name": "Rosto", "penalty": -5, "armor_body_part": "Rosto"},
-    5: {"name": "Pescoço", "penalty": -5, "armor_body_part": "Pescoço"},
-    6: {"name": "Virilha", "penalty": -3, "armor_body_part": "Virilha"},
-    7: {"name": "Braço", "penalty": -2, "armor_body_part": "Braços"},
-    8: {"name": "Perna", "penalty": -2, "armor_body_part": "Pernas"},
-    9: {"name": "Mão", "penalty": -4, "armor_body_part": "Mãos"},
-    10: {"name": "Pé", "penalty": -4, "armor_body_part": "Pés"},
+    0: {"name": "Tronco", "key": "torso", "penalty": 0, "armor_body_part": "Tronco"},
+    1: {"name": "Órgãos Vitais", "key": "vitals", "penalty": -3, "armor_body_part": "Tórax"},
+    2: {"name": "Crânio", "key": "skull", "penalty": -7, "armor_body_part": "Crânio"},
+    3: {"name": "Olho", "key": "eye", "penalty": -9, "armor_body_part": "Crânio"},
+    4: {"name": "Rosto", "key": "face", "penalty": -5, "armor_body_part": "Rosto"},
+    5: {"name": "Pescoço", "key": "neck", "penalty": -5, "armor_body_part": "Pescoço"},
+    6: {"name": "Virilha", "key": "groin", "penalty": -3, "armor_body_part": "Virilha"},
+    7: {"name": "Braço", "key": "arm", "penalty": -2, "armor_body_part": "Braços"},
+    8: {"name": "Perna", "key": "leg", "penalty": -2, "armor_body_part": "Pernas"},
+    9: {"name": "Mão", "key": "hand", "penalty": -4, "armor_body_part": "Mãos"},
+    10: {"name": "Pé", "key": "foot", "penalty": -4, "armor_body_part": "Pés"},
 }
 
 MANEUVERS: dict[str, dict[str, Any]] = {
@@ -82,6 +82,22 @@ _DAMAGE_EXPRESSION = re.compile(
     r"^\s*(?P<dice>\d+)d(?:(?P<sign>[+-])(?P<modifier>\d+))?\s*(?P<damage_type>.*)$",
     re.IGNORECASE,
 )
+
+DAMAGE_TYPE_KEYS: dict[int, str] = {
+    1: "affliction",
+    2: "burning",
+    3: "corrosion",
+    4: "crushing",
+    5: "cutting",
+    6: "fatigue",
+    7: "impaling",
+    8: "piercing_small",
+    9: "piercing",
+    10: "piercing_large",
+    11: "piercing_huge",
+    12: "special",
+    13: "toxic",
+}
 
 DAMAGE_TYPE_LABELS: dict[int, str] = {
     1: "Atribulação",
@@ -314,6 +330,7 @@ def compute_armor_dr(
     )
 
     warnings: list[str] = []
+    warning_keys: list[str] = []
     rigid_positions = [
         index
         for index, layer in enumerate(selected)
@@ -324,6 +341,7 @@ def compute_armor_dr(
             "Mais de uma camada rígida equipada no mesmo local; "
             "o mestre deve confirmar a composição."
         )
+        warning_keys.append("multiple_rigid_layers")
 
     total = 0
     breakdown: list[dict[str, Any]] = []
@@ -351,7 +369,12 @@ def compute_armor_dr(
             }
         )
 
-    return {"total": total, "layers": breakdown, "warnings": warnings}
+    return {
+        "total": total,
+        "layers": breakdown,
+        "warnings": warnings,
+        "warning_keys": warning_keys,
+    }
 
 
 def classify_roll(dice_pool: int, effective_skill: int) -> dict[str, Any]:
@@ -487,6 +510,7 @@ def compute_injury(
         "incapacitation": incapacitation,
         "appendage_hp": appendage_hp,
         "location_name": hit_location(hit_location_id)["name"],
+        "location_key": hit_location(hit_location_id)["key"],
     }
 
 

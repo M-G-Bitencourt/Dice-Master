@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
 import pytest
+
+os.environ.setdefault("DICE_MASTER_DEFAULT_LOCALE", "pt-BR")
 
 TESTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = TESTS_DIR.parent

@@ -5,6 +5,7 @@ from __future__ import annotations
 import discord
 
 from cogs.combat_helpers.combat_support import _friendly_character_error
+from utils.i18n import t as tr
 from utils.db_functions import (
     get_character_effect_link,
     get_character_profile_by_id,
@@ -27,7 +28,7 @@ async def perform_effect_change(
 
     if efeito_id <= 0:
         await interaction.followup.send(
-            "Erro: o ID do efeito deve ser maior que zero.",
+            tr("Error: effect ID must be greater than zero."),
             ephemeral=True,
         )
         return
@@ -41,7 +42,7 @@ async def perform_effect_change(
         )
     except (ValueError, TypeError) as error:
         await interaction.followup.send(
-            f"Erro: {_friendly_character_error(error)}",
+            tr("Error: {detail}", detail=_friendly_character_error(error)),
             ephemeral=True,
         )
         return
@@ -49,7 +50,7 @@ async def perform_effect_change(
     effect = get_combat_effect(cog.db_connection, int(efeito_id))
     if effect is None:
         await interaction.followup.send(
-            "Erro: efeito não encontrado no catálogo externo.",
+            tr("Error: effect not found in the external catalog."),
             ephemeral=True,
         )
         return
@@ -61,22 +62,29 @@ async def perform_effect_change(
             )
         if not linked:
             await interaction.followup.send(
-                f"O efeito **{effect['name']}** já está aplicado em "
-                f"**{profile['name']}**.",
+                tr(
+                    "Effect **{effect}** is already applied to **{character}**.",
+                    effect=effect["name"],
+                    character=profile["name"],
+                ),
                 ephemeral=True,
             )
             return
-        message = (
-            f"Efeito **{effect['name']}** aplicado em "
-            f"**{profile['name']}**."
+        message = tr(
+            "Effect **{effect}** applied to **{character}**.",
+            effect=effect["name"],
+            character=profile["name"],
         )
     elif acao == "remove":
         if not get_character_effect_link(
             cog.db_connection, character_id, int(efeito_id)
         ):
             await interaction.followup.send(
-                f"O efeito **{effect['name']}** não está aplicado em "
-                f"**{profile['name']}**.",
+                tr(
+                    "Effect **{effect}** is not applied to **{character}**.",
+                    effect=effect["name"],
+                    character=profile["name"],
+                ),
                 ephemeral=True,
             )
             return
@@ -84,13 +92,14 @@ async def perform_effect_change(
             unlink_character_effect(
                 cog.db_connection, character_id, int(efeito_id)
             )
-        message = (
-            f"Efeito **{effect['name']}** removido de "
-            f"**{profile['name']}**."
+        message = tr(
+            "Effect **{effect}** removed from **{character}**.",
+            effect=effect["name"],
+            character=profile["name"],
         )
     else:
         await interaction.followup.send(
-            "Erro: ação de efeito inválida.",
+            tr("Error: invalid effect action."),
             ephemeral=True,
         )
         return

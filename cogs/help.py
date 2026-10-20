@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -14,9 +17,33 @@ from utils.ansi import (
     ansi,
     code_block,
 )
+from utils.i18n import (
+    catalog_label,
+    command_display_description,
+    command_display_name,
+    get_locale,
+    locale_context,
+    t as tr,
+)
+from utils.locale_service import apply_interaction_locale
 
 
 HIDDEN_COMMANDS = frozenset({"hdm"})
+
+CATEGORY_ORDER = (
+    "Sheet",
+    "Skill_tests",
+    "Other_tests",
+    "Battle",
+    "Combat",
+    "Skills",
+    "Spells",
+    "Traits",
+    "Inventory",
+    "Admin",
+    "Help",
+    "Settings",
+)
 
 CATEGORY_LABELS = {
     "Sheet": "FICHA",
@@ -30,6 +57,7 @@ CATEGORY_LABELS = {
     "Inventory": "INVENTÁRIO",
     "Admin": "ADMINISTRAÇÃO",
     "Help": "AJUDA",
+    "Settings": "CONFIGURAÇÕES",
 }
 
 FALLBACK_CATEGORY = "OUTROS"
@@ -41,7 +69,10 @@ MAX_DESCRIPTION_CHARS = 1000
 def _category_label(command: app_commands.Command) -> str:
     """Resolve the localized category label from the command's owning cog."""
     qualified_name = getattr(command.binding, "qualified_name", None)
-    return CATEGORY_LABELS.get(qualified_name, FALLBACK_CATEGORY)
+    key = str(qualified_name) if qualified_name else "other"
+    if key not in CATEGORY_ORDER and key != "other":
+        key = "other"
+    return catalog_label("help_categories", key)
 
 
 def _command_line(command: app_commands.Command) -> str:
@@ -50,10 +81,18 @@ def _command_line(command: app_commands.Command) -> str:
     is_admin_only = bool(permissions and permissions.administrator)
     badge = f"{ansi('[ADMIN]', DANGER_COLOR)} " if is_admin_only else ""
 
-    description = str(command.description)[:MAX_DESCRIPTION_CHARS].strip()
+    description = command_display_description(
+        command.name,
+        str(command.description),
+    )[:MAX_DESCRIPTION_CHARS].strip()
+
+    localized_name = command_display_name(command.name)
+    name_label = ansi(f"/{command.name}", SUCCESS_COLOR)
+    if localized_name != command.name:
+        name_label += f" ({localized_name})"
 
     return (
-        f"  {badge}{ansi(f'/{command.name}', SUCCESS_COLOR)} - "
+        f"  {badge}{name_label} - "
         f"{ansi(description, NEUTRAL_COLOR)}"
     )
 
@@ -68,10 +107,13 @@ def _group_by_category(
         grouped.setdefault(_category_label(command), []).append(command)
 
     ordered_labels = [
-        label for label in CATEGORY_LABELS.values() if label in grouped
+        catalog_label("help_categories", name)
+        for name in CATEGORY_ORDER
+        if catalog_label("help_categories", name) in grouped
     ]
-    if FALLBACK_CATEGORY in grouped:
-        ordered_labels.append(FALLBACK_CATEGORY)
+    fallback = catalog_label("help_categories", "other")
+    if fallback in grouped:
+        ordered_labels.append(fallback)
 
     return [
         (label, sorted(grouped[label], key=lambda command: command.name))
@@ -120,25 +162,28 @@ def _paginate_categories(
     return pages
 
 
-def build_help_messages(commands: list[app_commands.Command]) -> list[str]:
+def build_help_messages(
+    commands: list[app_commands.Command], locale: str | None = None
+) -> list[str]:
     """Build plain message payloads with the complete command catalog."""
-    visible_commands = [
-        command for command in commands if command.name not in HIDDEN_COMMANDS
-    ]
+    with locale_context(locale or get_locale()):
+        visible_commands = [
+            command for command in commands if command.name not in HIDDEN_COMMANDS
+        ]
 
-    pages = _paginate_categories(_group_by_category(visible_commands))
+        pages = _paginate_categories(_group_by_category(visible_commands))
 
-    admin_note = ansi(
-        "Comandos marcados com [ADMIN] exigem permissão de administrador.",
-        NEUTRAL_COLOR,
-    )
+        admin_note = ansi(
+            tr("Commands marked with [ADMIN] require administrator permission."),
+            NEUTRAL_COLOR,
+        )
 
-    if pages and len(code_block(pages[-1] + ["", admin_note])) <= MAX_MESSAGE_CHARS:
-        pages[-1].extend(["", admin_note])
-    else:
-        pages.append([admin_note])
+        if pages and len(code_block(pages[-1] + ["", admin_note])) <= MAX_MESSAGE_CHARS:
+            pages[-1].extend(["", admin_note])
+        else:
+            pages.append([admin_note])
 
-    return [code_block(lines) for lines in pages]
+        return [code_block(lines) for lines in pages]
 
 
 class Help(commands.Cog):
@@ -146,12 +191,17 @@ class Help(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        project_root = Path(__file__).resolve().parent.parent
+        database_path = project_root / "data" / "database.db"
+        self.db_connection = sqlite3.connect(database_path)
+        self.db_connection.execute("PRAGMA foreign_keys = ON;")
 
     @app_commands.command(
         name="help",
-        description="Lista todos os comandos disponíveis com suas descrições",
+        description="List all available commands and their descriptions.",
     )
     async def help_command(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         messages = build_help_messages(self.bot.tree.get_commands())
 
         await interaction.response.send_message(

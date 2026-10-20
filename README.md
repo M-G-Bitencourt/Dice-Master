@@ -3,12 +3,24 @@
 ![Dice Master Banner](/assets/github_banner.png)
 
 # Dice-Master
+
+[Leia este documento em português](README.pt-BR.md)
+
 Dice Master is a Discord bot designed to simplify GURPS sessions. It streamlines gameplay by automating dice rolls, damage calculations, and character sheet management directly in the chat.
+
+## Localization
+
+The default language is English. Server administrators can change the bot language with `/language`; English and Brazilian Portuguese are available. Responses, embeds, buttons, modals, and error messages follow the server language, while Discord localizes slash command names and descriptions according to each user's client language. Portuguese clients see localized command names such as `/ficha`, `/inventario`, and `/combate_atacar`. New languages can be added through `locales/` without changing code; see `locales/README.md`.
 
 ## General Commands
 | Command | Description |
 | :---: | :---: |
 | /help | List all available commands and their descriptions. |
+
+## Settings Commands
+| Command | Description |
+| :---: | :---: |
+| /language | Change the bot language for this server. |
 
 ## Battle Commands
 | Command | Description |

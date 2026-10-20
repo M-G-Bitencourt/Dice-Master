@@ -1,0 +1,886 @@
+[meta]
+code = "pt-BR"
+name = "Portuguese (Brazil)"
+native_name = "Português (Brasil)"
+discord_locale = "pt-BR"
+aliases = ["pt", "pt-br", "pt_br", "portuguese", "portugues"]
+
+[commands.help]
+name = "ajuda"
+description = "Lista todos os comandos disponíveis com suas descrições."
+
+[commands.hdm]
+name = "hdm"
+description = "Comando de depuração para forçar o próximo resultado de rolagem."
+[commands.hdm.parameters.player]
+name = "jogador"
+description = "Jogador cujo próximo teste será alterado."
+[commands.hdm.parameters.fate]
+name = "destino"
+description = "Próximo resultado forçado para o jogador."
+
+[commands.manage_character_resource_pool]
+name = "gerenciar_recursos_personagem"
+description = "Edita o PV, o PF e a ER de um jogador."
+[commands.manage_character_resource_pool.parameters.player]
+name = "jogador"
+description = "Jogador cujos recursos serão alterados."
+[commands.manage_character_resource_pool.parameters.resource]
+name = "recurso"
+description = "Recurso que será alterado."
+[commands.manage_character_resource_pool.parameters.value]
+name = "valor"
+description = "Valor somado ou subtraído do recurso."
+
+[commands.restore_character_resources]
+name = "restaurar_recursos_personagem"
+description = "Restaura todos os recursos vitais aos tetos máximos."
+[commands.restore_character_resources.parameters.player]
+name = "jogador"
+description = "Jogador cujo personagem será restaurado."
+
+[commands.switch_character]
+name = "trocar_personagem"
+description = "Transfere o controle do seu usuário para outro personagem."
+[commands.switch_character.parameters.character]
+name = "personagem"
+description = "Personagem que você deseja assumir."
+
+[commands.manage_xp]
+name = "gerenciar_xp"
+description = "Adiciona ou remove pontos de personagem."
+[commands.manage_xp.parameters.character]
+name = "personagem"
+description = "Personagem que receberá o ajuste."
+[commands.manage_xp.parameters.points]
+name = "pontos"
+description = "Pontos a adicionar ou remover."
+
+[commands.manage_next_turn_conditions]
+name = "gerenciar_condicoes_turno"
+description = "Gerencia as condições de próximo turno de um personagem."
+[commands.manage_next_turn_conditions.parameters.character]
+name = "personagem"
+description = "Personagem que sofrerá a alteração."
+[commands.manage_next_turn_conditions.parameters.condition]
+name = "condicao"
+description = "Condição que será alterada."
+[commands.manage_next_turn_conditions.parameters.value]
+name = "valor"
+description = "Novo valor da condição."
+
+[commands.clear_next_turn_conditions]
+name = "limpar_condicoes_turno"
+description = "Zera todas as condições de próximo turno de um personagem."
+[commands.clear_next_turn_conditions.parameters.character]
+name = "personagem"
+description = "Personagem cujas condições serão zeradas."
+
+[commands.view_next_turn_conditions]
+name = "ver_condicoes_turno"
+description = "Exibe as condições de próximo turno de um personagem."
+[commands.view_next_turn_conditions.parameters.character]
+name = "personagem"
+description = "Personagem cujas condições serão exibidas."
+
+[commands.damage]
+name = "dano"
+description = "Calcula o dano de um ataque."
+[commands.damage.parameters.st]
+name = "forca"
+description = "Força do personagem."
+[commands.damage.parameters.modificador]
+name = "modificador"
+description = "Modificador de dano da arma."
+[commands.damage.parameters.atk_type]
+name = "tipo_ataque"
+description = "Golpe de ponta ou golpe em balanço."
+
+[commands.combat_aim]
+name = "combate_apontar"
+description = "Aponta com uma arma de combate a distância."
+
+[commands.combat_evaluate]
+name = "combate_avaliar"
+description = "Estuda o oponente para ganhar bônus na próxima rolagem."
+
+[commands.combat_start]
+name = "combate_iniciar"
+description = "Cria ou reabre o painel de combate deste canal."
+
+[commands.combat_end]
+name = "combate_encerrar"
+description = "Encerra o combate e descarta o ataque pendente."
+
+[commands.combat_manage_effect]
+name = "combate_gerenciar_efeito"
+description = "Adiciona ou remove um efeito do catálogo externo."
+[commands.combat_manage_effect.parameters.acao]
+name = "acao"
+description = "Adicionar ou remover o efeito."
+[commands.combat_manage_effect.parameters.efeito_id]
+name = "id_efeito"
+description = "ID do efeito no catálogo externo."
+[commands.combat_manage_effect.parameters.personagem]
+name = "personagem"
+description = "Personagem alvo. Jogadores usam o próprio personagem."
+
+[commands.combat_enter]
+name = "combate_entrar"
+description = "Adiciona um personagem ao combate com iniciativa."
+[commands.combat_enter.parameters.personagem]
+name = "personagem"
+description = "Personagem que entrará no combate."
+[commands.combat_enter.parameters.iniciativa]
+name = "iniciativa"
+description = "Iniciativa (aceita decimais); usa a Velocidade Básica se omitida."
+
+[commands.combat_next_turn]
+name = "combate_proximo_turno"
+description = "Encerra o turno atual e passa para o próximo participante."
+
+[commands.combat_undo]
+name = "combate_desfazer"
+description = "Desfaz o último dano aplicado neste canal."
+
+[commands.combat_feint]
+name = "combate_finta"
+description = "Executa uma finta e penaliza a próxima defesa do alvo."
+[commands.combat_feint.parameters.alvo]
+name = "alvo"
+description = "Personagem alvo da finta."
+[commands.combat_feint.parameters.personagem]
+name = "personagem"
+description = "Apenas para o mestre: personagem que está fintando."
+[commands.combat_feint.parameters.pericia]
+name = "pericia"
+description = "Perícia de combate usada na finta."
+[commands.combat_feint.parameters.nh_manual]
+name = "nh_manual"
+description = "Substitui o NH calculado pela perícia."
+[commands.combat_feint.parameters.defesa]
+name = "defesa"
+description = "NH de resistência do alvo. Usa a melhor perícia se omitido."
+[commands.combat_feint.parameters.modificador]
+name = "modificador"
+description = "Modificador situacional adicional de NH."
+
+[commands.combat_attack]
+name = "combate_atacar"
+description = "Ataca com uma arma equipada usando NH, dano e defesa automáticos."
+[commands.combat_attack.parameters.alvo]
+name = "alvo"
+description = "Personagem alvo do ataque."
+[commands.combat_attack.parameters.arma]
+name = "arma"
+description = "Arma equipada. Usa a primeira arma corpo a corpo se omitida."
+[commands.combat_attack.parameters.personagem]
+name = "personagem"
+description = "Apenas para o mestre: personagem que está atacando."
+[commands.combat_attack.parameters.local]
+name = "local"
+description = "Local atingido."
+[commands.combat_attack.parameters.manobra]
+name = "manobra"
+description = "Manobra de combate aplicada."
+[commands.combat_attack.parameters.modificador]
+name = "modificador"
+description = "Modificador situacional adicional de NH."
+[commands.combat_attack.parameters.nh_manual]
+name = "nh_manual"
+description = "Substitui o NH calculado pela arma."
+
+[commands.manage_money]
+name = "gerenciar_dinheiro"
+description = "Adiciona ou remove dinheiro de um personagem."
+[commands.manage_money.parameters.character]
+name = "personagem"
+description = "Personagem que receberá a transação."
+[commands.manage_money.parameters.money]
+name = "dinheiro"
+description = "Valor a adicionar ou remover."
+
+[commands.inventory]
+name = "inventario"
+description = "Exibe o inventário completo, armas, armaduras e equipamentos."
+
+[commands.roll]
+name = "rolar"
+description = "Rola uma quantidade de d6 e aplica um modificador."
+[commands.roll.parameters.num_dados]
+name = "num_dados"
+description = "Quantidade de dados a rolar."
+[commands.roll.parameters.modificador]
+name = "modificador"
+description = "Modificador aplicado à soma."
+
+[commands.react]
+name = "reacao"
+description = "Executa um teste de reação usando a tabela do GURPS."
+[commands.react.parameters.modifier]
+name = "modificador"
+description = "Soma dos modificadores de reação ativos."
+
+[commands.panic]
+name = "panico"
+description = "Executa uma verificação de pânico."
+[commands.panic.parameters.vontade]
+name = "vontade"
+description = "Valor de Vontade do personagem."
+[commands.panic.parameters.modificador]
+name = "modificador"
+description = "Soma dos modificadores de dificuldade."
+
+[commands.sheet]
+name = "ficha"
+description = "Envia sua ficha de personagem em uma mensagem efêmera."
+
+[commands.sheet_view]
+name = "ver_ficha"
+description = "Permite ao mestre inspecionar a ficha de qualquer personagem."
+[commands.sheet_view.parameters.character]
+name = "personagem"
+description = "Personagem que será inspecionado."
+
+[commands.test]
+name = "teste"
+description = "Executa um teste de habilidade."
+[commands.test.parameters.nh]
+name = "nh"
+description = "Nível de Habilidade efetivo."
+
+[commands.qkd]
+name = "disputa_rapida"
+description = "Resolve uma disputa rápida e retorna o vencedor."
+[commands.qkd.parameters.nh1]
+name = "nh_atacante"
+description = "NH do seu personagem."
+[commands.qkd.parameters.nh2]
+name = "nh_oponente"
+description = "NH do oponente."
+
+[commands.language]
+name = "idioma"
+description = "Altera o idioma do bot neste servidor."
+[commands.language.parameters.language]
+name = "idioma"
+description = "Idioma que o bot usará neste servidor."
+
+[choices]
+"Success" = "Sucesso"
+"Failure" = "Fracasso"
+"Critical Success" = "Sucesso Decisivo"
+"Critical Failure" = "Falha Crítica"
+"HP" = "PV"
+"FP" = "PF"
+"ER" = "ER"
+"Aim" = "Apontar"
+"Evaluate" = "Avaliar"
+"Shock" = "Choque"
+"Feint" = "Finta"
+"Thrust" = "Golpe de Ponta"
+"Swing" = "Golpe em Balanço"
+"Add" = "Adicionar"
+"Remove" = "Remover"
+"Torso" = "Tronco"
+"Vitals" = "Órgãos Vitais"
+"Skull" = "Crânio"
+"Eye" = "Olho"
+"Face" = "Rosto"
+"Neck" = "Pescoço"
+"Groin" = "Virilha"
+"Arm" = "Braço"
+"Leg" = "Perna"
+"Hand" = "Mão"
+"Foot" = "Pé"
+"Normal Attack" = "Ataque Normal"
+"All-Out Attack (Determined)" = "Ataque Total (Determinado)"
+"All-Out Attack (Strong)" = "Ataque Total (Forte)"
+"Defensive Attack" = "Ataque Defensivo"
+"Torso (+0)" = "Tronco (+0)"
+"Vitals (-3)" = "Órgãos Vitais (-3)"
+"Skull (-7)" = "Crânio (-7)"
+"Eye (-9)" = "Olho (-9)"
+"Face (-5)" = "Rosto (-5)"
+"Neck (-5)" = "Pescoço (-5)"
+"Groin (-3)" = "Virilha (-3)"
+"Arm (-2)" = "Braço (-2)"
+"Leg (-2)" = "Perna (-2)"
+"Hand (-4)" = "Mão (-4)"
+"Foot (-4)" = "Pé (-4)"
+
+[catalog.resources]
+hp = "PV"
+fp = "PF"
+er = "ER"
+
+[catalog.attributes]
+st = "ST"
+dx = "DX"
+iq = "IQ"
+ht = "HT"
+per = "Per"
+will = "Vont"
+
+[catalog.hit_locations]
+torso = "Tronco"
+vitals = "Órgãos Vitais"
+skull = "Crânio"
+eye = "Olho"
+face = "Rosto"
+neck = "Pescoço"
+groin = "Virilha"
+arm = "Braço"
+leg = "Perna"
+hand = "Mão"
+foot = "Pé"
+
+[catalog.maneuvers]
+normal = "Ataque Normal"
+all_out_determined = "Ataque Total (Determinado)"
+all_out_strong = "Ataque Total (Forte)"
+defensive = "Ataque Defensivo"
+
+[catalog.damage_types]
+affliction = "Atribulação"
+burning = "Queimadura"
+corrosion = "Corrosão"
+crushing = "Contusão"
+cutting = "Corte"
+fatigue = "Fadiga"
+impaling = "Perfuração"
+piercing_small = "Perfurante (Pi-)"
+piercing = "Perfurante (Pi)"
+piercing_large = "Muito Perfurante (Pi+)"
+piercing_huge = "Extremamente Perfurante (Pi++)"
+special = "Especial"
+toxic = "Toxina"
+
+[catalog.effect_types]
+attack = "Ataque"
+damage = "Dano"
+defense = "Defesa"
+dodge = "Esquiva"
+parry = "Aparar"
+rd = "RD"
+extra_defense_attempts = "Tentativas extras de defesa"
+extra_defense_uses = "Usos extras de defesa"
+
+[catalog.body_parts]
+torso = "Tronco"
+head = "Cabeça"
+skull = "Crânio"
+face = "Rosto"
+thorax = "Tórax"
+neck = "Pescoço"
+groin = "Virilha"
+arms = "Braços"
+legs = "Pernas"
+hands = "Mãos"
+feet = "Pés"
+shoulders = "Ombros"
+upper_arms = "Parte superior dos braços"
+elbows = "Cotovelos"
+forearms = "Antebraços"
+thighs = "Coxas"
+knees = "Joelhos"
+shins = "Canelas"
+abdomen = "Abdômen"
+
+[catalog.encumbrance]
+none = "Nenhuma"
+light = "Leve"
+medium = "Média"
+heavy = "Pesada"
+extra_heavy = "Muito Pesada"
+
+[catalog.equipment_badges]
+equipped = "[EQUIPADO]"
+stored = "[GUARDADO]"
+
+[catalog.damage_bases]
+swing = "GeB"
+thrust = "GdP"
+
+[catalog.parry]
+no = "Não"
+
+[catalog.health_labels]
+zero_hp = "0 PV"
+death_check = "Morte -{multiplier}xPV"
+
+[catalog.health_effects]
+conscious = "consciente"
+unconscious = "inconsciente"
+survives = "sobrevive"
+dying = "morrendo"
+dead = "morto"
+
+[catalog.health_status]
+conscious = "consciente"
+unconscious = "inconsciente"
+dying = "morrendo"
+dead = "morto"
+obliterated = "obliterado"
+
+[catalog.difficulties]
+easy = "Easy"
+medium = "Medium"
+hard = "Hard"
+very_hard = "Very Hard"
+ultra_hard = "Ultra Hard"
+
+[catalog.trait_categories]
+advantage = "Vantagem"
+disadvantage = "Desvantagem"
+
+[catalog.schools]
+no_school = "Sem Escola"
+
+[catalog.mode_names]
+default = "Padrão"
+punch = "Soco"
+kick = "Chute"
+
+[catalog.weapon_names]
+brawling = "Briga"
+unarmed_combat = "Combate Desarmado"
+
+[catalog.fate]
+"0" = "Sucesso"
+"1" = "Fracasso"
+"2" = "Sucesso Decisivo"
+"3" = "Falha Crítica"
+
+[catalog.condition_names]
+aim = "Apontar"
+evaluate = "Avaliar"
+shock = "Choque"
+feint = "Finta"
+
+[catalog.condition_fields]
+aim = "Apontar (Aim)"
+evaluate = "Avaliar (Evaluate)"
+shock = "Choque (Shock)"
+feint = "Finta (Feint)"
+
+[catalog.help_categories]
+Sheet = "FICHA"
+Skill_tests = "TESTES DE HABILIDADE"
+Other_tests = "TESTES GERAIS"
+Battle = "COMBATE"
+Combat = "COMBATE"
+Skills = "PERÍCIAS"
+Spells = "MAGIAS"
+Traits = "TRAÇOS"
+Inventory = "INVENTÁRIO"
+Admin = "ADMINISTRAÇÃO"
+Help = "AJUDA"
+Settings = "CONFIGURAÇÕES"
+other = "OUTROS"
+
+[messages]
+"Language set to {language}." = "Idioma definido para {language}."
+"This command can only be used in a server." = "Este comando só pode ser usado em um servidor."
+"Only administrators can change the bot language." = "Apenas administradores podem alterar o idioma do bot."
+"Error: invalid language." = "Erro: idioma inválido."
+"Commands marked with [ADMIN] require administrator permission." = "Comandos marcados com [ADMIN] exigem permissão de administrador."
+"Command names follow your Discord client language." = "Os nomes dos comandos seguem o idioma do seu cliente Discord."
+"CRITICAL FAILURE!" = "FALHA CRÍTICA!"
+"CRITICAL SUCCESS!" = "SUCESSO DECISIVO!"
+"SUCCESS!" = "SUCESSO!"
+"FAILURE" = "FALHA"
+"Dice Pool" = "Parada de Dados"
+"Skill Level" = "Nível de Habilidade"
+"Effective Skill" = "NH Efetivo"
+"Margin of Victory" = "Margem de Vitória"
+"Margin of Defeat" = "Margem de Derrota"
+"SUCCESS BY ROLL!" = "SUCESSO POR ROLAGEM!"
+"You succeeded on the test and your opponent failed." = "Você obteve um sucesso no teste e seu oponente um fracasso."
+"FAILURE BY ROLL!" = "FRACASSO POR ROLAGEM!"
+"You failed the test and your opponent succeeded." = "Você obteve um fracasso no teste e seu oponente um sucesso."
+"SUCCESS BY MARGIN!" = "SUCESSO POR MARGEM DE TESTE!"
+"The result was decided by the test margin." = "Resultado decidido pela margem do teste."
+"TIE!" = "EMPATE!"
+"The contest ended in an exact tie of margins." = "A disputa terminou em um equilíbrio absoluto de margens."
+"FAILURE BY MARGIN!" = "FRACASSO POR MARGEM DE TESTE!"
+"You" = "Você"
+"Opponent" = "Oponente"
+"Dice" = "Dados"
+"Success" = "Sucesso"
+"Yes" = "Sim"
+"No" = "Não"
+"Margin" = "Margem"
+"Margin Difference" = "Diferença das Margens de Sucesso"
+"ROLL" = "ROLAGEM"
+"Roll" = "Rolagem"
+"Modifier" = "Modificador"
+"Total" = "Total"
+"DISASTROUS REACTION" = "REAÇÃO DESASTROSA"
+"VERY BAD REACTION" = "REAÇÃO MUITO RUIM"
+"BAD REACTION" = "REAÇÃO RUIM"
+"WEAK REACTION" = "REAÇÃO FRACA"
+"NEUTRAL REACTION" = "REAÇÃO NEUTRA"
+"GOOD REACTION" = "REAÇÃO BOA"
+"VERY GOOD REACTION" = "REAÇÃO MUITO BOA"
+"EXCELLENT REACTION" = "REAÇÃO EXCELENTE"
+"Roll Metrics" = "Métricas da Rolagem"
+"Final Result" = "Resultado Final"
+"RESISTED PANIC" = "RESISTIU AO PÂNICO"
+"Will Level" = "Nível de Vontade"
+"Base Skill" = "NH Básico"
+"SUCCUMBED TO PANIC" = "SUCUMBIU AO PÂNICO"
+"**[CRITICAL FAILURE: +10 added to the final result!]**" = "**[FALHA CRÍTICA: +10 adicionado ao resultado final!]**"
+"The panic consequence table is in the Basic Set, p. 361." = "A tabela de consequências de pânico encontra-se no Módulo Básico, pág. 361."
+"Failure Metrics" = "Métricas de Fracasso"
+"Test Dice" = "Dados do Teste"
+"Failure Margin" = "Margem de Fracasso"
+"Panic Table Roll" = "Rolagem na Tabela de Pânicos"
+"Final Panic Value" = "Valor Final do Pânico"
+"DAMAGE" = "DANO"
+"Strength" = "Força"
+"Attack Type" = "Tipo de Ataque"
+"Roll Result" = "Resultado da Rolagem"
+"Strength Modifier" = "Modificador de Força"
+"Weapon Modifier" = "Modificador de Arma"
+"Aim turn {turn}." = "{turn}º Turno apontando."
+"Evaluate turn {turn}." = "{turn}º Turno Avaliando."
+"Thrust" = "Golpe de Ponta"
+"Swing" = "Golpe em Balanço"
+"Error. You do not have permission to use debug commands." = "Erro. Você não tem permissão para usar os comandos de Debug"
+"Processing error: structural database failure. {detail}" = "Erro de processamento: falha estrutural no banco de dados. {detail}"
+"The next roll for {player} will be {fate}." = "A próxima rolagem de {player} será {fate}"
+"Processing error: {detail}" = "Erro de processamento: {detail}"
+"GM Adjustment" = "Alteração do Mestre"
+"Mutation Balance" = "Balanço da Mutação"
+"Character: `{character}`\nAffected Resource: `{resource}`\nApplied Modifier: `{modifier}`\nState Transition: `{current}` -> `{new}`" = "Personagem: `{character}`\nRecurso Afetado: `{resource}`\nModificador Aplicado: `{modifier}`\nTransição de Estado: `{current}` -> `{new}`"
+"Current State" = "Estado Atual"
+"Absolute Structural Restoration" = "Restauração Estrutural Absoluta"
+"The vital flows of the character belonging to {player} were forcibly raised to their systemic limits." = "Os fluxos vitais do personagem pertencente ao indivíduo {player} foram compulsoriamente elevados aos seus limites sistêmicos."
+"Character: `{character}`\n\n**HP (Hit Points):** `{old_hp}` -> `{max_hp}`\n**FP (Fatigue Points):** `{old_fp}` -> `{max_fp}`\n**ER (Energy Reserve):** `{old_er}` -> `{max_er}`" = "Personagem: `{character}`\n\n**PV (Hit Points):** `{old_hp}` -> `{max_hp}`\n**PF (Fatigue Points):** `{old_fp}` -> `{max_fp}`\n**ER (Energy Reserve):** `{old_er}` -> `{max_er}`"
+"Restored State" = "Estado Restaurado"
+"Processing error: invalid character identifier." = "Erro de processamento: O identificador do personagem é inválido."
+"Unknown Entity" = "Entidade Desconhecida"
+"Avatar Synchronization Complete" = "Sincronização de Avatar Concluída"
+"{user} is now playing **{character}**." = "{user} agora está jogando com **{character}**."
+"[ERROR] **Processing error:** the supplied character identifier is invalid." = "[ERRO] **Erro de processamento:** O identificador do personagem fornecido é inválido."
+"[ERROR] **Consistency error:** no entity was found under ID `{character_id}`." = "[ERRO] **Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{character_id}`."
+"POINT ADJUSTMENT (XP): {character}" = "AJUSTE DE PONTOS (XP): {character}"
+"Grant (+XP)" = "Concessão (+XP)"
+"Deduction (-XP)" = "Dedução (-XP)"
+"Approved Operation" = "Operação Homologada"
+"Type: `{type}`\nAdjustment: `{points:+d} pts`" = "Tipo: `{type}`\nAjuste: `{points:+d} pts`"
+"Points Breakdown" = "Demonstrativo de Pontos"
+"Previous: `{previous} pts`\nCurrent: `{current} pts`" = "Anterior: `{previous} pts`\nAtual: `{current} pts`"
+"Processing error: the supplied character identifier is invalid." = "Erro de processamento: O identificador do personagem fornecido é inválido."
+"Processing error: character not found." = "Erro de processamento: Personagem não encontrado."
+"GM Change to Next-Turn Conditions" = "Mudança do Mestre Nas Condições de Próximo Turno"
+"**{character}** had their next-turn conditions changed." = "**{character}** teve suas condições de próximo turno alteradas."
+"Affected Parameter" = "Parâmetro Afetado"
+"New Assigned Value" = "Novo Valor Alocado"
+"Tactical State Purge" = "Purgação de Estado Tático"
+"All combat variables for **{character}**'s next turn were reduced to absolute zero." = "Todas as variáveis de combate para o próximo turno de **{character}** foram matematicamente reduzidas ao zero absoluto."
+"Processing error: the specified entity was not found." = "Erro de processamento: A entidade especificada não foi localizada na matriz fundacional."
+"Tactical State Diagnosis - {character}" = "Diagnóstico de Estado Tático — {character}"
+"Unspent Points" = "Pontos não Gastos"
+"Money" = "Dinheiro"
+"Basic Attributes" = "Atributos Básicos"
+"Secondary Characteristics" = "Características Secundárias"
+"Max HP" = "PV Máximo"
+"Max FP" = "PF Máximo"
+"Will" = "Vontade"
+"Perception" = "Percepção"
+"Current Resources (HP - FP - ER)" = "Recursos Atuais (PV - PF - ER)"
+"Inventory" = "Inventário"
+"Skills" = "Perícias"
+"Advantages/Disadvantages" = "Vantagens/Desvantagens"
+"Spells" = "Magias"
+"Error: only the user who invoked this command can interact with this menu." = "Erro: Apenas o usuário que invocou o comando pode interagir com este menu."
+"Consistency error: no inventory is associated with the character." = "Erro de consistência: nenhum inventário associado ao personagem."
+"Consistency error: character with ID `{character_id}` was not found." = "Erro de consistência: Personagem com ID `{character_id}` não foi localizado."
+"Character {character} has no registered skills." = "O personagem {character} não possui nenhuma perícia cadastrada."
+"Character {character} has no registered advantages or disadvantages." = "O personagem {character} não possui nenhuma vantagem ou desvantagem cadastrada."
+"Character {character} has no registered spells." = "O personagem {character} não possui nenhuma magia cadastrada."
+"Weight" = "Peso"
+"Min ST" = "ST Mín"
+"Reach" = "Alc"
+"Parry" = "Ap"
+"Modes (cont.)" = "Modos (cont.)"
+"Damage" = "Dano"
+"Accuracy" = "Precisão"
+"Range" = "Alcance"
+"Shots" = "Tiros"
+"Value" = "Valor"
+"DR" = "RD"
+"Location" = "Local"
+"Qty" = "Qtd"
+"No equipment or items recorded." = "Nenhum equipamento ou item registrado."
+"Equipment and load record for the character." = "Registro de equipamento e carga do personagem."
+"Total Weight" = "Peso Total"
+"Equipped" = "Equipados"
+"Items" = "Itens"
+"Load" = "Carga"
+"Inventory: {character}" = "Inventário: {character}"
+"item" = "item"
+"items" = "itens"
+"continuation" = "continuação"
+"Melee Weapons" = "Armas Corpo a Corpo"
+"Ranged Weapons" = "Armas a Distância"
+"Armor" = "Armaduras"
+"Flexible DR" = "RD flexível"
+"General Items" = "Itens Gerais"
+"Previous" = "Anterior"
+"Next" = "Próxima"
+"Back" = "Voltar"
+"Page {current} of {total}" = "Página {current} de {total}"
+"**Processing error:** the supplied character identifier is invalid." = "**Erro de processamento:** O identificador do personagem fornecido é inválido."
+"**Consistency error:** no entity was found under ID `{character_id}`." = "**Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{character_id}`."
+"ASSET CHANGE: {character}" = "MUTAÇÃO PATRIMONIAL: {character}"
+"Income" = "Entrada"
+"Expense" = "Saída"
+"Approved Transaction" = "Transação Homologada"
+"Type: `{type}`\nFlow: `{money:+d} $`" = "Tipo: `{type}`\nFluxo: `{money:+d} $`"
+"Balance Statement" = "Demonstrativo de Saldos"
+"Previous: `{previous} $`\nUpdated: `{updated} $`" = "Anterior: `{previous} $`\nAtualizado: `{updated} $`"
+"**You do not have an active character assigned to your account!**" = "**Você não possui um personagem ativo atribuído à sua conta!**"
+"Skill" = "NH"
+"Relative Level" = "Nível Relativo"
+"Difficulty" = "Dificuldade"
+"Description and Rules:" = "Descrição e Regras:"
+"Select a skill to inspect..." = "Selecione uma perícia para inspecionar..."
+"Error: skill not found in the current record." = "Erro: Perícia não localizada no registro atual."
+"No detailed description available." = "Nenhuma descrição detalhada disponível."
+"Skill: {name}" = "Perícia: {name}"
+"# Skills: **{character}**" = "# Perícias: **{character}**"
+"*Page {current} of {total}*" = "*Página {current} de {total}*"
+"Select a skill from the menu below to inspect its details." = "Selecione uma perícia no menu abaixo para inspecionar seus detalhes."
+"Select a spell to inspect..." = "Selecione uma magia para inspecionar..."
+"Error: spell not found in the current record." = "Erro: Magia não localizada no registro atual."
+"Spell: {name}" = "Magia: {name}"
+"# Spells: **{character}**" = "# Magias: **{character}**"
+"Select a spell from the menu below to inspect its details." = "Selecione uma magia no menu abaixo para inspecionar seus detalhes."
+"No School" = "Sem Escola"
+"Cost" = "Custo"
+"Select a trait to inspect..." = "Selecione uma característica para inspecionar..."
+"Error: trait not found in the current record." = "Erro: Característica não localizada no registro atual."
+"No notes recorded." = "Nenhuma observação registrada."
+"Notes:" = "Observações:"
+"# Advantages and Disadvantages: **{character}**" = "# Vantagens e Desvantagens: **{character}**"
+"Select a trait from the menu below to inspect its details." = "Selecione uma característica no menu abaixo para inspecionar seus detalhes."
+"Processing error: the supplied character identifier is structurally invalid." = "Erro de processamento: O identificador do personagem fornecido é estruturalmente inválido."
+"Injury State" = "Ferimento"
+"Injury" = "Lesão"
+
+"You do not have an active character assigned to your account." = "Você não possui um personagem ativo atribuído à sua conta."
+"Character not found." = "Personagem não encontrado."
+"Invalid character or weapon identifier." = "Identificador de personagem ou arma inválido."
+"There is no active combat in this channel." = "não existe combate ativo neste canal."
+"Resolve the pending attack before advancing the turn." = "resolva o ataque pendente antes de avançar o turno."
+"No participants are registered in this combat." = "nenhum participante registrado no combate."
+"Base" = "Base"
+"CRITICAL SUCCESS" = "SUCESSO DECISIVO"
+"SUCCESS by {margin}" = "SUCESSO por {margin}"
+"CRITICAL FAILURE" = "FALHA CRÍTICA"
+"FAILURE by {margin}" = "FALHA por {margin}"
+"HP {current}/{maximum} - 1/3 or less\nMove: {move}\nDodge: {dodge}" = "PV {current}/{maximum} - 1/3 ou menos\nDeslocamento: {move}\nEsquiva: {dodge}"
+"(failure by {margin})" = "(falha por {margin})"
+"HT Checks" = "Testes de HT"
+"Character Status" = "Estado do personagem"
+"Attack: {actor} -> {target}" = "Ataque: {actor} -> {target}"
+"Default" = "Padrão"
+"Result" = "Resultado"
+"Modifiers" = "Modificadores"
+"Critical dice" = "Dados críticos"
+"not available" = "não disponível"
+"Weapon damage: {expression}" = "Dano da arma: {expression}"
+"Total damage: {damage} {damage_type}" = "Dano total: {damage} {damage_type}"
+"Location: {location}" = "Local: {location}"
+"HP" = "PV"
+"HP {old} -> {new}\n{penetrating} penetrating x {multiplier:.1f} = {injury} HP" = "PV {old} -> {new}\n{penetrating} penetrante x {multiplier:.1f} = {injury} PV"
+"Armor Warning" = "Aviso de armadura"
+"Available Defenses" = "Defesas disponíveis"
+"Feint" = "Finta"
+"-{penalty} to defenses against this attack." = "-{penalty} nas defesas contra este ataque."
+"Defense" = "Defesa"
+"Critical Failure Table" = "Tabela de Falhas Críticas"
+"Awaiting target defense. The attack expires in 15 minutes." = "Aguardando defesa do alvo. O ataque expira em 15 minutos."
+"NPC: awaiting GM defense. Expires in 15 minutes." = "NPC: aguardando defesa do mestre. Expira em 15 minutos."
+"Attack result resolved." = "Resultado do ataque resolvido."
+"Defense waived: {target}" = "Defesa abandonada: {target}"
+"The target chose not to defend." = "O alvo optou por não defender."
+"Critical defense failure: {target}" = "Falha crítica na defesa: {target}"
+"The defense collapsed and the attack hit the target." = "A defesa colapsou e o ataque atingiu o alvo."
+"Decisive defense: {target}" = "Defesa decisiva: {target}"
+"The target avoided the attack with a decisive defense." = "O alvo evitou o ataque com uma defesa decisiva."
+"Successful defense: {target}" = "Defesa bem-sucedida: {target}"
+"The target avoided the attack." = "O alvo evitou o ataque."
+"Defense failed: {target}" = "Defesa fracassou: {target}"
+"The attack hit the target." = "O ataque atingiu o alvo."
+"Waived the defense" = "Desistiu da defesa"
+"Raw damage: {raw}\nDR: {dr}\nPenetrating: {penetrating}\nMultiplier: x{multiplier:.1f}\nApplied damage: {applied} HP" = "Dano bruto: {raw}\nRD: {dr}\nPenetrante: {penetrating}\nMultiplicador: x{multiplier:.1f}\nDano aplicado: {applied} PV"
+"Applied damage" = "Dano aplicado"
+"No damage applied." = "Nenhum dano aplicado."
+"Transition" = "Transição"
+"Defense attempt failed: {target}" = "Defesa falhou: {target}"
+"Attempt {attempt} of {maximum}. The attack remains pending; choose another defense or waive." = "Tentativa {attempt} de {maximum}. O ataque continua pendente; escolha outra defesa ou desista."
+"Attempts" = "Tentativas"
+"Remaining Defenses" = "Defesas restantes"
+"No damage has been applied yet." = "Nenhum dano foi aplicado ainda."
+"Combat ended" = "Combate encerrado"
+"The combat session in this channel was closed." = "A sessão de combate deste canal foi encerrada."
+"Combat Panel" = "Painel de Combate"
+"No active session in this channel.\n\nUse `/combat_start` to create a session and `/combat_attack` to begin." = "Nenhuma sessão ativa neste canal.\n\nUse `/combat_start` para criar uma sessão e `/combat_attack` para começar."
+"Attacks use `/combat_attack`. Defense is resolved with the buttons attached to the attack message." = "Ataques usam `/combat_attack`. A defesa é feita pelos botões anexados à mensagem do ataque."
+"Session" = "Sessão"
+"Round {round}" = "Rodada {round}"
+"Current Turn" = "Turno atual"
+"Init." = "Inic."
+"*Showing 15 participants.*" = "*Exibindo 15 participantes.*"
+"Participants" = "Participantes"
+"[UNDONE]" = "[DESFEITO]"
+"Recent Events" = "Últimos eventos"
+"Pending Attack" = "Ataque pendente"
+"None. Use `/combat_attack` to attack." = "Nenhum. Use `/combat_attack` para atacar."
+"Target" = "Alvo"
+"Status" = "Status"
+"Only the target or the GM can use the defense buttons." = "Somente o alvo ou o mestre podem usar os botões de defesa."
+"Feint: {actor} deceived {target}" = "Fintar: {actor} enganou {target}"
+"{actor}'s next attack against {target} ignores {value} of defense." = "O próximo ataque de {actor} contra {target} ignora {value} de defesa."
+"Feint: {actor} failed" = "Fintar: {actor} falhou"
+"The attacker could not execute the feint." = "O atacante não conseguiu executar a finta."
+"Feint: {target} resisted" = "Fintar: {target} resistiu"
+"The target saw through the feint; no penalty was applied." = "O alvo percebeu a finta; nenhuma penalidade foi aplicada."
+"success by {margin}" = "sucesso por {margin}"
+"failure by {margin}" = "falha por {margin}"
+"Shock" = "Choque"
+"Attacker" = "Atacante"
+"Feint penalty: {value}" = "Penalidade de finta: {value}"
+"No penalty." = "Sem penalidade."
+"Dodge {value}" = "Esquivar {value}"
+"({uses} uses)" = "({uses} usos)"
+"Parry {weapon} {value}" = "Aparar {weapon} {value}"
+"Waive" = "Desistir"
+"Adjust" = "Ajustar"
+"Adjust defense" = "Ajustar defesa"
+"Defense skill" = "NH de defesa"
+"Base DR" = "RD base"
+"Situational modifier" = "Modificador situacional"
+"Error: enter integer values for skill, DR, and modifier." = "Erro: informe valores inteiros para NH, RD e modificador."
+"Error: enter the defense skill for manual adjustment." = "Erro: informe o NH de defesa para o ajuste manual."
+"Error: defense skill must be between 0 and 60." = "Erro: o NH de defesa deve estar entre 0 e 60."
+"Error: manual DR must be between -20 and 50." = "Erro: a RD manual deve estar entre -20 e 50."
+"Error: the modifier must be between -20 and +20." = "Erro: o modificador deve estar entre -20 e +20."
+"Error: defense resolution is unavailable." = "Erro: resolução de defesa indisponível."
+"Manual defense" = "Defesa manual"
+"Error: this attack no longer exists." = "Erro: este ataque não existe mais."
+"Error: only the attack target or the GM can defend." = "Erro: apenas o alvo do ataque ou o mestre podem defender."
+"Error: only the attacker or the GM can use these actions." = "Erro: apenas o atacante ou o mestre podem usar estas ações."
+"Error: repetition is unavailable for this attack." = "Erro: repetição indisponível para este ataque."
+"Aim prepared for the next attack." = "Mira preparada para o próximo ataque."
+"Evaluation prepared for the next attack." = "Avaliação preparada para o próximo ataque."
+"Refresh" = "Atualizar"
+"Advance Turn" = "Avançar turno"
+"Close" = "Encerrar"
+"Error: combat channel not found." = "Erro: canal do combate não localizado."
+"Error: could not repost the combat panel." = "Erro: não foi possível repostar o painel de combate."
+"Panel updated, but the old panel could not be deleted." = "Painel atualizado, mas não foi possível apagar o painel antigo."
+"Error: only the GM can advance the turn." = "Erro: apenas o mestre pode avançar o turno."
+"Error: only the GM can end the combat." = "Erro: apenas o mestre pode encerrar o combate."
+"Error: {detail}" = "Erro: {detail}"
+"Error: there is no active combat in this channel." = "Erro: não existe combate ativo neste canal."
+
+"Error: feint skill must be between 0 and 60." = "Erro: o NH da finta deve estar entre 0 e 60."
+
+"Error: resistance skill must be between 0 and 60." = "Erro: o NH de resistência deve estar entre 0 e 60."
+
+"Error: the feint modifier must be between -20 and +20." = "Erro: o modificador de finta deve estar entre -20 e +20."
+
+"A character cannot feint themselves." = "O personagem não pode fintar a si mesmo."
+
+"Error: the character has no combat skills." = "Erro: o personagem não possui perícias de combate."
+
+"Error: there is no active combat in this channel. Use `/combat_enter` to join." = "Erro: não existe combate ativo neste canal. Use `/combat_enter` para participar."
+
+"Error: attacker and target must be in the combat. Use `/combat_enter` to join." = "Erro: atacante e alvo precisam estar no combate. Use `/combat_enter` para participar."
+
+"Error: resolve the pending attack before feinting." = "Erro: resolva o ataque pendente antes de fintar."
+
+"Error: it is not this character's turn. Use `/combat_next_turn` to advance the turn." = "Erro: não é o turno deste personagem. Use `/combat_next_turn` para avançar o turno."
+
+"Error: the selected skill does not belong to the character." = "Erro: a perícia selecionada não pertence ao personagem."
+
+"Error: provide a skill or a manual skill level for the feint." = "Erro: informe uma perícia ou um NH manual para a finta."
+
+"{actor} feinted {target} (penalty {penalty})." = "{actor} fintou {target} (penalidade {penalty})."
+
+"{actor} tried to feint {target} without success." = "{actor} tentou fintar {target} sem sucesso."
+
+"Error: effect ID must be greater than zero." = "Erro: o ID do efeito deve ser maior que zero."
+"Error: effect not found in the external catalog." = "Erro: efeito não encontrado no catálogo externo."
+"Effect **{effect}** is already applied to **{character}**." = "O efeito **{effect}** já está aplicado em **{character}**."
+"Effect **{effect}** applied to **{character}**." = "Efeito **{effect}** aplicado em **{character}**."
+"Effect **{effect}** is not applied to **{character}**." = "O efeito **{effect}** não está aplicado em **{character}**."
+"Effect **{effect}** removed from **{character}**." = "Efeito **{effect}** removido de **{character}**."
+"Error: invalid effect action." = "Erro: ação de efeito inválida."
+
+"Error: the situational modifier must be between -20 and +20." = "Erro: o modificador situacional deve estar entre -20 e +20."
+"Error: manual skill must be between 0 and 60." = "Erro: o NH manual deve estar entre 0 e 60."
+"Error: {detail}." = "Erro: {detail}."
+"Error: the attacking character was not found." = "Erro: o personagem atacante não foi localizado."
+"Error: the target character was not found." = "Erro: o personagem alvo não foi localizado."
+"Error: the ranged weapon damage is invalid. Use an expression such as `2d+1 imp`." = "Erro: o dano da arma à distância é inválido. Use uma expressão como `2d+1 imp`."
+"Error: the ranged weapon has no configured skill. Assign a skill to the weapon." = "Erro: a arma à distância não possui uma perícia configurada. Cadastre a perícia na arma."
+"not configured" = "não configurada"
+"Error: the character does not have the **{skill}** skill required by this ranged weapon." = "Erro: o personagem não possui a perícia **{skill}** exigida por esta arma à distância."
+"Shot" = "Disparo"
+"Error: the character does not have the **{skill}** skill used by this weapon mode. Assign the skill or use `nh_manual`." = "Erro: o personagem não possui a perícia **{skill}** usada por este modo de arma. Cadastre a perícia ou use `nh_manual`."
+"Weapon" = "Arma"
+"Error: All-Out Attack (Strong) does not apply to ranged weapons." = "Erro: Ataque Total (Forte) não se aplica a armas à distância."
+"Aim" = "Mira"
+"Evaluate" = "Avaliar"
+"Encumbrance" = "Carga"
+"Situational" = "Situacional"
+"Mode" = "Modo"
+"{actor} attacked {target} with {weapon}: {result}." = "{actor} atacou {target} com {weapon}: {result}."
+"{target} suffered {injury} HP from the attack." = "{target} sofreu {injury} PV por ataque."
+"No defense: the target is in All-Out Attack." = "Sem defesa: o alvo está em Ataque Total."
+"No defenses available this turn." = "Sem defesas disponíveis neste turno."
+"Target: **{name}**" = "Alvo: **{name}**"
+"Error: this attack does not have enough data for repetition." = "Erro: este ataque não possui dados suficientes para repetição."
+"Attack superseded by a new attack." = "Ataque substituído por um novo ataque."
+
+"Error: enter a defense skill." = "Erro: informe um NH de defesa."
+"This attack was already resolved, superseded, or expired." = "Este ataque já foi resolvido, substituído ou expirou."
+"This defense has already been used this turn." = "Esta defesa já foi usada neste turno."
+"{target} attempted {defense} (attempt {attempt}/{maximum}): {result}." = "{target} tentou {defense} (tentativa {attempt}/{maximum}): {result}."
+"{target} used {defense}: {result}." = "{target} usou {defense}: {result}."
+"waived" = "desistiu"
+"{target} suffered {injury} HP." = "{target} sofreu {injury} PV."
+"Error resolving defense. No damage was applied." = "Erro ao resolver a defesa. Nenhum dano foi aplicado."
+
+"Combat panel updated." = "Painel de combate atualizado."
+"Combat ended and pending attack discarded." = "Combate encerrado e ataque pendente descartado."
+"Error: initiative must be between 0 and 99." = "Erro: a iniciativa deve estar entre 0 e 99."
+"{character} entered the combat." = "{character} entrou no combate."
+"**{character}** entered the combat with initiative `{initiative}`." = "**{character}** entrou no combate com iniciativa `{initiative}`."
+"Error: only the active participant or the GM can advance the turn." = "Erro: apenas o participante ativo ou o mestre podem avançar o turno."
+"Turn of **{character}** (round {round})." = "Turno de **{character}** (rodada {round})."
+"Error: only the GM can undo damage." = "Erro: apenas o mestre pode desfazer dano."
+"Error: no damage is pending reversal." = "Erro: nenhum dano pendente de reversão."
+"Error: damage target character was not found." = "Erro: personagem do dano não foi localizado."
+"Error: the target HP changed since that damage; reversal cancelled." = "Erro: o PV do alvo mudou desde esse dano; reversão cancelada."
+"Damage of {damage} undone on {target} (HP {after} -> {before})." = "Dano de {damage} desfeito em {target} (PV {after} -> {before})."
+"Damage undone: **{character}** returned to `{hp}` HP." = "Dano desfeito: **{character}** voltou a `{hp}` PV."
+"You cannot manage effects for this character." = "Você não pode gerenciar efeitos deste personagem."
+"Only the GM can choose another character as the actor." = "Apenas o mestre pode escolher outro personagem como ator."
+"The selected weapon does not belong to the specified character." = "A arma escolhida não pertence ao personagem informado."
+"The character has no equipped melee weapon." = "O personagem não possui arma corpo a corpo equipada."
+"The selected weapon is invalid." = "A arma selecionada é inválida."
+"The selected weapon is not equipped by the character." = "A arma selecionada não está equipada no personagem."
+"The character has no equipped ranged weapon." = "O personagem não possui arma à distância equipada."
+"The selected ranged weapon is invalid." = "A arma à distância selecionada é inválida."
+"The selected ranged weapon is not equipped by the character." = "A arma à distância selecionada não está equipada no personagem."
+"Effective skill" = "NH efetivo"
+
+"The selected melee weapon is invalid." = "A arma corpo a corpo selecionada é inválida."
+"Turn of {character} (round {round})." = "Turno de {character} (rodada {round})."

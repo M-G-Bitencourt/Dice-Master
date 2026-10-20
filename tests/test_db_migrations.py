@@ -57,7 +57,13 @@ def test_migration_creates_combat_tables_and_layer_column():
         "character_combat_effects",
         "combat_participants",
         "combat_log",
+        "guild_settings",
     } <= tables
+
+    guild_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(guild_settings)")
+    }
+    assert {"guild_id", "locale", "updated_at"} <= guild_columns
 
     columns = {
         row[1]

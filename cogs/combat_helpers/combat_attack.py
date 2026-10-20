@@ -25,8 +25,9 @@ from cogs.combat_helpers.combat_support import (
     _roll_result_text,
 )
 from cogs.combat_helpers.combat_views import DefenseView
+from utils.i18n import catalog_label, catalog_label_from_value, get_locale, t as tr
 from utils.combat import (
-    DAMAGE_TYPE_LABELS,
+    DAMAGE_TYPE_KEYS,
     HIT_LOCATIONS,
     MANEUVERS,
     build_modifier_breakdown,
@@ -73,12 +74,12 @@ async def perform_attack(
 
     if modificador is not None and not -20 <= modificador <= 20:
         await interaction.edit_original_response(
-            content="Erro: o modificador situacional deve estar entre -20 e +20."
+            content=tr("Error: the situational modifier must be between -20 and +20.")
         )
         return
     if nh_manual is not None and not 0 <= nh_manual <= 60:
         await interaction.edit_original_response(
-            content="Erro: o NH manual deve estar entre 0 e 60."
+            content=tr("Error: manual skill must be between 0 and 60.")
         )
         return
 
@@ -92,14 +93,14 @@ async def perform_attack(
         if arma is not None and arma.startswith("ranged:"):
             parts = arma.split(":", 2)
             if len(parts) != 3:
-                raise ValueError("A arma à distância selecionada é inválida.")
+                raise ValueError("The selected ranged weapon is invalid.")
             attack_kind = "ranged"
             weapon_character_id = int(parts[1])
             selection_value = f"ranged:{parts[1]}:{parts[2]}"
         elif arma is not None and arma.startswith("melee:"):
             parts = arma.split(":", 2)
             if len(parts) != 3:
-                raise ValueError("A arma corpo a corpo selecionada é inválida.")
+                raise ValueError("The selected melee weapon is invalid.")
             weapon_character_id = int(parts[1])
             selection_value = f"{parts[1]}:{parts[2]}"
         elif arma is not None:
@@ -128,7 +129,7 @@ async def perform_attack(
                 attack_kind = "ranged"
     except (ValueError, AttributeError) as error:
         await interaction.edit_original_response(
-            content=f"Erro: {_friendly_character_error(error)}."
+            content=tr("Error: {detail}.", detail=_friendly_character_error(error))
         )
         return
 
@@ -137,9 +138,8 @@ async def perform_attack(
     )
     if active_session is None:
         await interaction.edit_original_response(
-            content=(
-                "Erro: não existe combate ativo neste canal. "
-                "Use `/combat_enter` para participar."
+            content=tr(
+                "Error: there is no active combat in this channel. Use `/combat_enter` to join."
             )
         )
         return
@@ -156,9 +156,8 @@ async def perform_attack(
     )
     if actor_participant is None or target_participant is None:
         await interaction.edit_original_response(
-            content=(
-                "Erro: atacante e alvo precisam estar no combate. "
-                "Use `/combat_enter` para participar."
+            content=tr(
+                "Error: attacker and target must be in the combat. Use `/combat_enter` to join."
             )
         )
         return
@@ -170,9 +169,8 @@ async def perform_attack(
         and not cog._is_gm(interaction)
     ):
         await interaction.edit_original_response(
-            content=(
-                "Erro: não é o turno deste personagem. "
-                "Use `/combat_next_turn` para avançar o turno."
+            content=tr(
+                "Error: it is not this character's turn. Use `/combat_next_turn` to advance the turn."
             )
         )
         return
@@ -186,18 +184,18 @@ async def perform_attack(
         )
     except ValueError as error:
         await interaction.edit_original_response(
-            content=f"Erro: {_friendly_character_error(error)}."
+            content=tr("Error: {detail}.", detail=_friendly_character_error(error))
         )
         return
 
     if actor_data is None:
         await interaction.edit_original_response(
-            content="Erro: o personagem atacante não foi localizado."
+            content=tr("Error: the attacking character was not found.")
         )
         return
     if target_data is None:
         await interaction.edit_original_response(
-            content="Erro: o personagem alvo não foi localizado."
+            content=tr("Error: the target character was not found.")
         )
         return
 
@@ -208,9 +206,8 @@ async def perform_attack(
         )
         if parsed_damage is None:
             await interaction.edit_original_response(
-                content=(
-                    "Erro: o dano da arma à distância é inválido. "
-                    "Use uma expressão como `2d+1 imp`."
+                content=tr(
+                    "Error: the ranged weapon damage is invalid. Use an expression such as `2d+1 imp`."
                 )
             )
             return
@@ -218,25 +215,24 @@ async def perform_attack(
         ranged_skill_id = ranged_weapon.get("skill_id")
         if ranged_skill_id is None:
             await interaction.edit_original_response(
-                content=(
-                    "Erro: a arma à distância não possui uma perícia "
-                    "configurada. Cadastre a perícia na arma."
+                content=tr(
+                    "Error: the ranged weapon has no configured skill. Assign a skill to the weapon."
                 )
             )
             return
         skill = actor_data["skill_by_id"].get(int(ranged_skill_id))
         if skill is None:
-            skill_label = ranged_weapon.get("skill_name") or "não configurada"
+            skill_label = ranged_weapon.get("skill_name") or tr("not configured")
             await interaction.edit_original_response(
-                content=(
-                    "Erro: o personagem não possui a perícia "
-                    f"**{skill_label}** exigida por esta arma à distância."
+                content=tr(
+                    "Error: the character does not have the **{skill}** skill required by this ranged weapon.",
+                    skill=skill_label,
                 )
             )
             return
 
         weapon_name = ranged_weapon["weapon_name"]
-        mode_name = "Disparo"
+        mode_name = tr("Shot")
         skill_name = skill["name"]
         damage_type = int(parsed_damage["damage_type"])
         gdp_geb = 0
@@ -251,12 +247,11 @@ async def perform_attack(
             and bool(mode.get("is_fallback"))
         )
         if skill is None and nh_manual is None and not unarmed_default:
-            mode_skill = mode.get("skill_name") or "não configurada"
+            mode_skill = mode.get("skill_name") or tr("not configured")
             await interaction.edit_original_response(
-                content=(
-                    "Erro: o personagem não possui a perícia "
-                    f"**{mode_skill}** usada por este modo de arma. "
-                    "Cadastre a perícia ou use `nh_manual`."
+                content=tr(
+                    "Error: the character does not have the **{skill}** skill used by this weapon mode. Assign the skill or use `nh_manual`.",
+                    skill=mode_skill,
                 )
             )
             return
@@ -267,10 +262,10 @@ async def perform_attack(
             skill_name = skill["name"]
         elif unarmed_default:
             skill_name = (
-                f"{mode.get('skill_name') or 'Combate Desarmado'} (DX-4)"
+                f"{mode.get('skill_name') or catalog_label_from_value('weapon_names', 'Combate Desarmado', 'en-US')} (DX-4)"
             )
         else:
-            skill_name = mode.get("skill_name") or "Arma"
+            skill_name = mode.get("skill_name") or tr("Weapon")
         damage_type = normalize_damage_type(mode["damage_type"])
         gdp_geb = (
             1 if str(mode["damage_base"]).strip().lower() == "geb" else 0
@@ -287,8 +282,8 @@ async def perform_attack(
     maneuver_key = manobra.value if manobra is not None else "normal"
     if attack_kind == "ranged" and maneuver_key == "all_out_strong":
         await interaction.edit_original_response(
-            content=(
-                "Erro: Ataque Total (Forte) não se aplica a armas à distância."
+            content=tr(
+                "Error: All-Out Attack (Strong) does not apply to ranged weapons."
             )
         )
         return
@@ -296,21 +291,21 @@ async def perform_attack(
     conditions = actor_data["conditions"]
 
     condition_modifier = (
-        ("Mira", min(int(conditions["aim"]), 3))
+        (tr("Aim"), min(int(conditions["aim"]), 3))
         if attack_kind == "ranged"
-        else ("Avaliar", min(int(conditions["evaluate"]), 3))
+        else (tr("Evaluate"), min(int(conditions["evaluate"]), 3))
     )
     modifiers: list[tuple[str, int]] = [
-        (maneuver["label"], int(maneuver["attack_modifier"])),
-        ("Local", int(location["penalty"])),
+        (catalog_label("maneuvers", maneuver_key), int(maneuver["attack_modifier"])),
+        (tr("Location"), int(location["penalty"])),
         condition_modifier,
-        ("Choque", -int(conditions["shock"])),
-        ("Carga", int(actor_data["encumbrance_penalty"])),
-        ("Situacional", int(modificador or 0)),
+        (tr("Shock"), -int(conditions["shock"])),
+        (tr("Encumbrance"), int(actor_data["encumbrance_penalty"])),
+        (tr("Situational"), int(modificador or 0)),
     ]
     mode_attack_modifier = int(mode.get("attack_modifier") or 0) if mode else 0
     if mode_attack_modifier:
-        modifiers.append(("Modo", mode_attack_modifier))
+        modifiers.append((tr("Mode"), mode_attack_modifier))
     breakdown = build_modifier_breakdown(base_nh, modifiers)
     actor_effects = get_character_combat_effects(
         cog.db_connection, actor_character_id
@@ -600,9 +595,12 @@ async def perform_attack(
                 if damage_data is not None
                 else 0
             ),
-            description=(
-                f"{actor_profile['name']} atacou {target_profile['name']} "
-                f"com {weapon_name}: {_roll_result_text(outcome)}."
+            description=tr(
+                "{actor} attacked {target} with {weapon}: {result}.",
+                actor=actor_profile["name"],
+                target=target_profile["name"],
+                weapon=weapon_name,
+                result=_roll_result_text(outcome),
             ),
         )
         if critical_injury is not None:
@@ -616,9 +614,10 @@ async def perform_attack(
                 value=int(critical_injury["final_injury"]),
                 hp_before=critical_old_pv,
                 hp_after=critical_new_pv,
-                description=(
-                    f"{target_profile['name']} sofreu "
-                    f"{critical_injury['final_injury']} PV por ataque."
+                description=tr(
+                    "{target} suffered {injury} HP from the attack.",
+                    target=target_profile["name"],
+                    injury=critical_injury["final_injury"],
                 ),
             )
 
@@ -628,9 +627,11 @@ async def perform_attack(
         target_owner_id=target_owner_id,
         weapon_name=weapon_name,
         mode_name=mode_name,
-        maneuver_label=maneuver["label"],
-        hit_location_name=location["name"],
-        damage_type_label=DAMAGE_TYPE_LABELS.get(damage_type, "Especial"),
+        maneuver_label=catalog_label("maneuvers", maneuver_key),
+        hit_location_name=catalog_label("hit_locations", location["key"]),
+        damage_type_label=catalog_label(
+            "damage_types", DAMAGE_TYPE_KEYS.get(damage_type, "special")
+        ),
         attack_roll=attack_roll,
         attack_dices=dices,
         breakdown=breakdown,
@@ -646,9 +647,9 @@ async def perform_attack(
         health_outcome=critical_health,
         defense_note=(
             (
-                "Sem defesa: o alvo está em Ataque Total."
+                tr("No defense: the target is in All-Out Attack.")
                 if target_no_defense
-                else "Sem defesas disponíveis neste turno."
+                else tr("No defenses available this turn.")
             )
             if target_cannot_defend and outcome["success"]
             else None
@@ -663,7 +664,9 @@ async def perform_attack(
     if target_owner_id is not None:
         content = f"<@{target_owner_id}>"
     else:
-        content = _clamp(f"Alvo: **{target_profile['name']}**", 1900)
+        content = _clamp(
+            tr("Target: **{name}**", name=target_profile["name"]), 1900
+        )
 
     view = None
     if pending_id is not None:
@@ -676,6 +679,7 @@ async def perform_attack(
             defenses=defenses,
             repeat_callback=cog._repeat_attack_from_action,
             resolve_callback=resolve_defense,
+            locale=get_locale(),
         )
 
     try:
@@ -709,7 +713,7 @@ async def repeat_attack(
     ranged_weapon_id = claimed.get("ranged_weapon_id")
     if mode_id is None and ranged_weapon_id is None:
         await interaction.response.send_message(
-            "Erro: este ataque não possui dados suficientes para repetição.",
+            tr("Error: this attack does not have enough data for repetition."),
             ephemeral=True,
         )
         return
@@ -772,7 +776,7 @@ async def disable_superseded_messages(
         try:
             message = await channel.fetch_message(int(message_id))
             await message.edit(
-                content="Ataque substituído por um novo ataque.",
+                content=tr("Attack superseded by a new attack."),
                 view=None,
             )
         except (discord.HTTPException, discord.NotFound, discord.Forbidden):

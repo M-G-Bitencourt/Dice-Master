@@ -11,6 +11,7 @@ from cogs.combat_helpers.combat_support import (
     _roll_result_text,
 )
 from utils.ansi import code_block, resource_bar
+from utils.i18n import catalog_label, t as tr
 
 
 def _dice_pool(dices: list[int]) -> str:
@@ -26,12 +27,15 @@ def _add_health_fields(embed: discord.Embed, health_outcome: dict | None) -> Non
 
     if health_outcome["wounded"]:
         embed.add_field(
-            name="Ferimento",
+            name=tr("Injury State"),
             value=_clamp(
-                f"PV {health_outcome['current_pv']}/{health_outcome['max_pv']} "
-                f"- 1/3 ou menos\n"
-                f"Deslocamento: {health_outcome['move']}\n"
-                f"Esquiva: {health_outcome['dodge']}",
+                tr(
+                    "HP {current}/{maximum} - 1/3 or less\nMove: {move}\nDodge: {dodge}",
+                    current=health_outcome["current_pv"],
+                    maximum=health_outcome["max_pv"],
+                    move=health_outcome["move"],
+                    dodge=health_outcome["dodge"],
+                ),
                 1000,
             ),
             inline=False,
@@ -41,23 +45,32 @@ def _add_health_fields(embed: discord.Embed, health_outcome: dict | None) -> Non
     if checks:
         lines = []
         for check in checks:
+            label = check["label"]
+            if check.get("label_key"):
+                label = catalog_label("health_labels", check["label_key"])
+                label = label.format(**(check.get("label_params") or {}))
             result = str(check["effect"])
+            if check.get("effect_key"):
+                result = catalog_label("health_effects", check["effect_key"])
             if not check["success"]:
-                result += f" (falha por {-check['margin']})"
+                result += " " + tr("(failure by {margin})", margin=-check["margin"])
             lines.append(
-                f"{check['label']}: {_dice_pool(check['dices'])} "
+                f"{label}: {_dice_pool(check['dices'])} "
                 f"vs HT {check['target']} -> {result}"
             )
         embed.add_field(
-            name="Testes de HT",
+            name=tr("HT Checks"),
             value=_clamp("\n".join(lines), 1000),
             inline=False,
         )
 
     if health_outcome.get("status"):
+        status = str(health_outcome["status"])
+        if health_outcome.get("status_key"):
+            status = catalog_label("health_status", health_outcome["status_key"])
         embed.add_field(
-            name="Estado do personagem",
-            value=_clamp(str(health_outcome["status"]).capitalize(), 1000),
+            name=tr("Character Status"),
+            value=_clamp(status.capitalize(), 1000),
             inline=False,
         )
 
@@ -91,9 +104,12 @@ def _build_attack_embed(
     critical_failure_dices: list[int] | None = None,
 ) -> discord.Embed:
     """Build the compact public attack result embed."""
-    title = _clamp(f"Ataque: {actor_name} -> {target_name}", 256)
+    title = _clamp(
+        tr("Attack: {actor} -> {target}", actor=actor_name, target=target_name),
+        256,
+    )
     description = _clamp(
-        f"{weapon_name} ({mode_name or 'Padrão'})\n{maneuver_label}",
+        f"{weapon_name} ({mode_name or tr('Default')})\n{maneuver_label}",
         4000,
     )
 
@@ -112,17 +128,17 @@ def _build_attack_embed(
     )
 
     embed.add_field(
-        name="Rolagem",
+        name=tr("Roll"),
         value=_clamp(
-            f"Dados: {_dice_pool(attack_dices)}\n"
-            f"NH efetivo: `{breakdown['effective']}`\n"
-            f"Resultado: {_roll_result_text(outcome)}",
+            f"{tr('Dice')}: {_dice_pool(attack_dices)}\n"
+            f"{tr("Effective skill")}: `{breakdown['effective']}`\n"
+            f"{tr('Result')}: {_roll_result_text(outcome)}",
             1000,
         ),
         inline=False,
     )
     embed.add_field(
-        name="Modificadores",
+        name=tr("Modifiers"),
         value=_format_modifiers(breakdown),
         inline=False,
     )
@@ -131,21 +147,28 @@ def _build_attack_embed(
         if outcome["critical_success"]:
             damage_dices = damage_data.get("critical_dices") or []
             damage_total = damage_data["critical_damage"]
-            dice_label = "Dados críticos"
+            dice_label = tr("Critical dice")
         else:
             damage_dices = damage_data.get("dices") or []
             damage_total = damage_data["damage"]
-            dice_label = "Dados"
+            dice_label = tr("Dice")
         damage_lines = [
-            f"Dano da arma: {damage_data.get('expression', 'não disponível')}",
+            tr(
+                "Weapon damage: {expression}",
+                expression=damage_data.get("expression", tr("not available")),
+            ),
             f"{dice_label}: {_dice_pool(damage_dices)}",
-            f"Modificadores: {int(damage_data.get('total_modifier', 0)):+d}",
-            f"Dano total: {damage_total} {damage_type_label}",
-            f"Local: {hit_location_name}",
-            f"RD: {rd}",
+            f"{tr('Modifiers')}: {int(damage_data.get('total_modifier', 0)):+d}",
+            tr(
+                "Total damage: {damage} {damage_type}",
+                damage=damage_total,
+                damage_type=damage_type_label,
+            ),
+            tr("Location: {location}", location=hit_location_name),
+            f"{tr('DR')}: {rd}",
         ]
         embed.add_field(
-            name="Dano",
+            name=tr("Damage"),
             value=_clamp("\n".join(damage_lines), 1000),
             inline=False,
         )
@@ -153,17 +176,21 @@ def _build_attack_embed(
     if injury_data is not None and new_pv is not None and profile is not None:
         max_pv = _max_pv(profile)
         embed.add_field(
-            name="PV",
-            value=code_block([resource_bar("PV", new_pv, max_pv)]),
+            name=tr("HP"),
+            value=code_block([resource_bar(tr("HP"), new_pv, max_pv)]),
             inline=False,
         )
         embed.add_field(
-            name="Lesão",
+            name=tr("Injury"),
             value=_clamp(
-                f"PV {old_pv} -> {new_pv}\n"
-                f"{injury_data['penetrating_damage']} penetrante x "
-                f"{injury_data['multiplier']:.1f} = "
-                f"{injury_data['final_injury']} PV",
+                tr(
+                    "HP {old} -> {new}\n{penetrating} penetrating x {multiplier:.1f} = {injury} HP",
+                    old=old_pv,
+                    new=new_pv,
+                    penetrating=injury_data["penetrating_damage"],
+                    multiplier=injury_data["multiplier"],
+                    injury=injury_data["final_injury"],
+                ),
                 1000,
             ),
             inline=False,
@@ -173,14 +200,14 @@ def _build_attack_embed(
 
     if rd_warnings:
         embed.add_field(
-            name="Aviso de armadura",
+            name=tr("Armor Warning"),
             value=_clamp(" ".join(rd_warnings), 1000),
             inline=False,
         )
 
     if defense_options:
         embed.add_field(
-            name="Defesas disponíveis",
+            name=tr("Available Defenses"),
             value=_clamp(
                 "\n".join(option["label"] for option in defense_options),
                 1000,
@@ -190,9 +217,12 @@ def _build_attack_embed(
 
     if feint_penalty:
         embed.add_field(
-            name="Finta",
+            name=tr("Feint"),
             value=_clamp(
-                f"-{feint_penalty} nas defesas contra este ataque.",
+                tr(
+                    "-{penalty} to defenses against this attack.",
+                    penalty=feint_penalty,
+                ),
                 1000,
             ),
             inline=False,
@@ -200,16 +230,16 @@ def _build_attack_embed(
 
     if defense_note:
         embed.add_field(
-            name="Defesa",
+            name=tr("Defense"),
             value=_clamp(defense_note, 1000),
             inline=False,
         )
 
     if critical_failure_dices:
         embed.add_field(
-            name="Tabela de Falhas Críticas",
+            name=tr("Critical Failure Table"),
             value=_clamp(
-                f"Dados: {critical_failure_dices} = {sum(critical_failure_dices)}",
+                f"{tr('Dice')}: {critical_failure_dices} = {sum(critical_failure_dices)}",
                 1000,
             ),
             inline=False,
@@ -217,12 +247,14 @@ def _build_attack_embed(
 
     if awaiting_defense and target_owner_id is not None:
         embed.set_footer(
-            text="Aguardando defesa do alvo. O ataque expira em 15 minutos."
+            text=tr("Awaiting target defense. The attack expires in 15 minutes.")
         )
     elif awaiting_defense:
-        embed.set_footer(text="NPC: aguardando defesa do mestre. Expira em 15 minutos.")
+        embed.set_footer(
+            text=tr("NPC: awaiting GM defense. Expires in 15 minutes.")
+        )
     else:
-        embed.set_footer(text="Resultado do ataque resolvido.")
+        embed.set_footer(text=tr("Attack result resolved."))
 
     return embed
 
@@ -247,24 +279,24 @@ def _build_defense_embed(
     target_name = profile["name"]
 
     if waive:
-        title = f"Defesa abandonada: {target_name}"
-        description = "O alvo optou por não defender."
+        title = tr("Defense waived: {target}", target=target_name)
+        description = tr("The target chose not to defend.")
         color = discord.Color.dark_red()
     elif outcome["critical_failure"]:
-        title = f"Falha crítica na defesa: {target_name}"
-        description = "A defesa colapsou e o ataque atingiu o alvo."
+        title = tr("Critical defense failure: {target}", target=target_name)
+        description = tr("The defense collapsed and the attack hit the target.")
         color = discord.Color.brand_red()
     elif outcome["critical_success"]:
-        title = f"Defesa decisiva: {target_name}"
-        description = "O alvo evitou o ataque com uma defesa decisiva."
+        title = tr("Decisive defense: {target}", target=target_name)
+        description = tr("The target avoided the attack with a decisive defense.")
         color = discord.Color.gold()
     elif outcome["success"]:
-        title = f"Defesa bem-sucedida: {target_name}"
-        description = "O alvo evitou o ataque."
+        title = tr("Successful defense: {target}", target=target_name)
+        description = tr("The target avoided the attack.")
         color = discord.Color.green()
     else:
-        title = f"Defesa fracassou: {target_name}"
-        description = "O ataque atingiu o alvo."
+        title = tr("Defense failed: {target}", target=target_name)
+        description = tr("The attack hit the target.")
         color = discord.Color.red()
 
     embed = discord.Embed(
@@ -274,44 +306,47 @@ def _build_defense_embed(
     )
 
     if waive:
-        defense_value = "Desistiu da defesa"
+        defense_value = tr("Waived the defense")
     else:
         defense_value = (
             f"{defense_label}\n"
-            f"Dados: {_dice_pool(dices)}\n"
-            f"NH efetivo: `{effective_nh}`\n"
-            f"Resultado: {_roll_result_text(outcome)}"
+            f"{tr('Dice')}: {_dice_pool(dices)}\n"
+            f"{tr("Effective skill")}: `{effective_nh}`\n"
+            f"{tr('Result')}: {_roll_result_text(outcome)}"
         )
-    embed.add_field(name="Defesa", value=_clamp(defense_value, 1000), inline=False)
+    embed.add_field(name=tr("Defense"), value=_clamp(defense_value, 1000), inline=False)
 
     if injury_data is not None:
         embed.add_field(
-            name="Dano",
+            name=tr("Damage"),
             value=_clamp(
-                f"Dano bruto: {chosen_damage}\n"
-                f"RD: {rd}\n"
-                f"Penetrante: {injury_data['penetrating_damage']}\n"
-                f"Multiplicador: x{injury_data['multiplier']:.1f}\n"
-                f"Dano aplicado: {injury_data['final_injury']} PV",
+                tr(
+                    "Raw damage: {raw}\nDR: {dr}\nPenetrating: {penetrating}\nMultiplier: x{multiplier:.1f}\nApplied damage: {applied} HP",
+                    raw=chosen_damage,
+                    dr=rd,
+                    penetrating=injury_data["penetrating_damage"],
+                    multiplier=injury_data["multiplier"],
+                    applied=injury_data["final_injury"],
+                ),
                 1000,
             ),
             inline=False,
         )
     else:
         embed.add_field(
-            name="Dano aplicado",
-            value="Nenhum dano aplicado.",
+            name=tr("Applied damage"),
+            value=tr("No damage applied."),
             inline=False,
         )
 
     embed.add_field(
-        name="PV",
-        value=code_block([resource_bar("PV", new_pv, _max_pv(profile))]),
+        name=tr("HP"),
+        value=code_block([resource_bar(tr("HP"), new_pv, _max_pv(profile))]),
         inline=False,
     )
     embed.add_field(
-        name="Transição",
-        value=_clamp(f"PV {old_pv} -> {new_pv}", 1000),
+        name=tr("Transition"),
+        value=_clamp(f"{tr('HP')} {old_pv} -> {new_pv}", 1000),
         inline=False,
     )
 
@@ -319,7 +354,7 @@ def _build_defense_embed(
 
     if rd_warnings:
         embed.add_field(
-            name="Aviso de armadura",
+            name=tr("Armor Warning"),
             value=_clamp(" ".join(rd_warnings), 1000),
             inline=False,
         )
@@ -341,45 +376,50 @@ def _build_interim_defense_embed(
 ) -> discord.Embed:
     """Build the result shown when another defence attempt is still allowed."""
     embed = discord.Embed(
-        title=_clamp(f"Defesa falhou: {profile['name']}", 256),
+        title=_clamp(
+            tr("Defense attempt failed: {target}", target=profile["name"]), 256
+        ),
         description=_clamp(
-            f"Tentativa {attempt_number} de {max_attempts}. "
-            "O ataque continua pendente; escolha outra defesa ou desista.",
+            tr(
+                "Attempt {attempt} of {maximum}. The attack remains pending; choose another defense or waive.",
+                attempt=attempt_number,
+                maximum=max_attempts,
+            ),
             4000,
         ),
         color=discord.Color.orange(),
     )
     embed.add_field(
-        name="Defesa",
+        name=tr("Defense"),
         value=_clamp(
             f"{defense_label}\n"
-            f"Dados: {_dice_pool(dices)}\n"
-            f"NH efetivo: `{effective_nh}`\n"
-            f"Resultado: {_roll_result_text(outcome)}",
+            f"{tr('Dice')}: {_dice_pool(dices)}\n"
+            f"{tr("Effective skill")}: `{effective_nh}`\n"
+            f"{tr('Result')}: {_roll_result_text(outcome)}",
             1000,
         ),
         inline=False,
     )
     embed.add_field(
-        name="Tentativas",
+        name=tr("Attempts"),
         value=f"`{attempt_number}/{max_attempts}`",
         inline=False,
     )
     embed.add_field(
-        name="RD",
+        name=tr("DR"),
         value=f"`{rd}`",
         inline=False,
     )
     if remaining_options:
         embed.add_field(
-            name="Defesas restantes",
+            name=tr("Remaining Defenses"),
             value=_clamp(
                 "\n".join(option["label"] for option in remaining_options),
                 1000,
             ),
             inline=False,
         )
-    embed.set_footer(text="Nenhum dano foi aplicado ainda.")
+    embed.set_footer(text=tr("No damage has been applied yet."))
     return embed
 
 
@@ -394,33 +434,33 @@ def build_panel_embed(
     """Build the public combat dashboard embed."""
     if closed:
         return discord.Embed(
-            title="Combate encerrado",
-            description="A sessão de combate deste canal foi encerrada.",
+            title=tr("Combat ended"),
+            description=tr("The combat session in this channel was closed."),
             color=discord.Color.dark_grey(),
         )
 
     if session is None:
         return discord.Embed(
-            title="Painel de Combate",
-            description=(
-                "Nenhuma sessão ativa neste canal.\n\n"
-                "Use `/combat_start` para criar uma sessão e "
-                "`/combat_attack` para começar."
+            title=tr("Combat Panel"),
+            description=tr(
+                "No active session in this channel.\n\nUse `/combat_start` to create a session and `/combat_attack` to begin."
             ),
             color=discord.Color.blue(),
         )
 
     embed = discord.Embed(
-        title="Painel de Combate",
-        description=(
-            "Ataques usam `/combat_attack`. A defesa é feita pelos botões "
-            "anexados à mensagem do ataque."
+        title=tr("Combat Panel"),
+        description=tr(
+            "Attacks use `/combat_attack`. Defense is resolved with the buttons attached to the attack message."
         ),
         color=discord.Color.green(),
     )
     embed.add_field(
-        name="Sessão",
-        value=f"Rodada {int(session.get('round_number') or 1)}",
+        name=tr("Session"),
+        value=tr(
+            "Round {round}",
+            round=int(session.get("round_number") or 1),
+        ),
         inline=False,
     )
 
@@ -436,7 +476,7 @@ def build_panel_embed(
             str(active_character_id),
         )
         embed.add_field(
-            name="Turno atual",
+            name=tr("Current Turn"),
             value=_clamp(str(active_name), 1000),
             inline=False,
         )
@@ -447,14 +487,14 @@ def build_panel_embed(
                 ("-> " if active_character_id is not None and int(participant["character_id"]) == int(active_character_id) else "   ")
                 + f"{participant.get('character_name') or participant['character_id']}"
                 f"{' [NPC]' if participant.get('is_npc') else ''}"
-                f" (Inic. {float(participant.get('initiative') or 0):g})"
+                f" ({tr('Init.')} {float(participant.get('initiative') or 0):g})"
             )
             for participant in participants[:15]
         ]
         if len(participants) > 15:
-            participant_lines.append("*Exibindo 15 participantes.*")
+            participant_lines.append(tr("*Showing 15 participants.*"))
         embed.add_field(
-            name="Participantes",
+            name=tr("Participants"),
             value=_clamp("\n".join(participant_lines), 1000),
             inline=False,
         )
@@ -462,35 +502,37 @@ def build_panel_embed(
     if recent_log:
         log_lines = [
             f"* {entry.get('description') or entry.get('event_type')}"
-            f"{' [DESFEITO]' if entry.get('reverted') else ''}"
+            f"{' ' + tr('[UNDONE]') if entry.get('reverted') else ''}"
             for entry in recent_log[:5]
         ]
         embed.add_field(
-            name="Últimos eventos",
+            name=tr("Recent Events"),
             value=_clamp("\n".join(log_lines), 1000),
             inline=False,
         )
 
     if pending is None:
         embed.add_field(
-            name="Ataque pendente",
-            value="Nenhum. Use `/combat_attack` para atacar.",
+            name=tr("Pending Attack"),
+            value=tr("None. Use `/combat_attack` to attack."),
             inline=False,
         )
     else:
         embed.add_field(
-            name="Ataque pendente",
+            name=tr("Pending Attack"),
             value=_clamp(
-                f"{pending['weapon_name']} ({pending['mode_name'] or 'Padrão'})\n"
-                f"Alvo: {pending['target_character_id']}\n"
-                f"Dano: {pending['raw_damage']}\n"
-                f"Status: {pending['status']}",
+                f"{pending['weapon_name']} ({pending['mode_name'] or tr('Default')})\n"
+                f"{tr('Target')}: {pending['target_character_id']}\n"
+                f"{tr('Damage')}: {pending['raw_damage']}\n"
+                f"{tr('Status')}: {pending['status']}",
                 1000,
             ),
             inline=False,
         )
 
-    embed.set_footer(text="Somente o alvo ou o mestre podem usar os botões de defesa.")
+    embed.set_footer(
+        text=tr("Only the target or the GM can use the defense buttons.")
+    )
     return embed
 
 
@@ -514,19 +556,21 @@ def _build_feint_embed(
 ) -> discord.Embed:
     """Build the public feint contest result embed."""
     if success:
-        title = f"Fintar: {actor_name} enganou {target_name}"
-        description = (
-            f"O próximo ataque de {actor_name} contra {target_name} "
-            f"ignora {feint_value} de defesa."
+        title = tr("Feint: {actor} deceived {target}", actor=actor_name, target=target_name)
+        description = tr(
+            "{actor}'s next attack against {target} ignores {value} of defense.",
+            actor=actor_name,
+            target=target_name,
+            value=feint_value,
         )
         color = discord.Color.green()
     elif not actor_success:
-        title = f"Fintar: {actor_name} falhou"
-        description = "O atacante não conseguiu executar a finta."
+        title = tr("Feint: {actor} failed", actor=actor_name)
+        description = tr("The attacker could not execute the feint.")
         color = discord.Color.red()
     else:
-        title = f"Fintar: {target_name} resistiu"
-        description = "O alvo percebeu a finta; nenhuma penalidade foi aplicada."
+        title = tr("Feint: {target} resisted", target=target_name)
+        description = tr("The target saw through the feint; no penalty was applied.")
         color = discord.Color.orange()
 
     embed = discord.Embed(
@@ -537,25 +581,29 @@ def _build_feint_embed(
     def roll_line(
         dices: list[int], nh: int, success: bool, margin: int
     ) -> str:
-        state = f"sucesso por {margin}" if success else f"falha por {abs(margin)}"
+        state = (
+            tr("success by {margin}", margin=margin)
+            if success
+            else tr("failure by {margin}", margin=abs(margin))
+        )
         return (
-            f"Dados: {_dice_pool(dices)}\n"
-            f"NH efetivo: `{nh}`\n"
-            f"Resultado: {state}"
+            f"{tr('Dice')}: {_dice_pool(dices)}\n"
+            f"{tr("Effective skill")}: `{nh}`\n"
+            f"{tr('Result')}: {state}"
         )
 
     attacker_value = roll_line(
         actor_dices, actor_nh, actor_success, actor_margin
     )
     if shock:
-        attacker_value += f"\nChoque: -{int(shock)}"
+        attacker_value += f"\n{tr('Shock')}: -{int(shock)}"
     embed.add_field(
-        name="Atacante",
+        name=tr("Attacker"),
         value=_clamp(attacker_value, 1000),
         inline=False,
     )
     embed.add_field(
-        name="Alvo",
+        name=tr("Target"),
         value=_clamp(
             roll_line(target_dices, target_nh, target_success, target_margin),
             1000,
@@ -563,9 +611,11 @@ def _build_feint_embed(
         inline=False,
     )
     embed.add_field(
-        name="Resultado",
+        name=tr("Result"),
         value=_clamp(
-            f"Penalidade de finta: {feint_value}" if success else "Sem penalidade.",
+            tr("Feint penalty: {value}", value=feint_value)
+            if success
+            else tr("No penalty."),
             1000,
         ),
         inline=False,

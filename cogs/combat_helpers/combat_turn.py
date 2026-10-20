@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from utils.i18n import t as tr
 from utils.db_functions import (
     add_combat_log,
     clear_character_shock,
@@ -22,18 +23,18 @@ def advance_combat_turn(
     """Advance to the next participant and return the updated state."""
     session = get_active_combat_session(connection, channel_id)
     if session is None:
-        raise ValueError("não existe combate ativo neste canal.")
+        raise ValueError("No active combat in this channel.")
 
     if get_pending_attack_for_channel(connection, channel_id) is not None:
         raise ValueError(
-            "resolva o ataque pendente antes de avançar o turno."
+            "Resolve the pending attack before advancing the turn."
         )
 
     participants = get_combat_participants(
         connection, int(session["session_id"])
     )
     if not participants:
-        raise ValueError("nenhum participante registrado no combate.")
+        raise ValueError("No participants are registered in this combat.")
 
     ordered = sorted(
         participants,
@@ -89,9 +90,10 @@ def advance_combat_turn(
             channel_id=channel_id,
             event_type="turn",
             actor_character_id=next_character_id,
-            description=(
-                f"Turno de {next_participant['character_name']} "
-                f"(rodada {round_number})."
+            description=tr(
+                "Turn of {character} (round {round}).",
+                character=next_participant["character_name"],
+                round=round_number,
             ),
         )
 

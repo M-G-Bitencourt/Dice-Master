@@ -16,6 +16,7 @@ from cogs.combat_helpers.combat_rules import (
 )
 from cogs.combat_helpers.combat_support import _can_defend, _roll_result_text
 from cogs.combat_helpers.combat_views import DefenseView, NextActionView
+from utils.i18n import get_locale, t as tr
 from utils.combat import (
     classify_roll,
     compute_armor_dr,
@@ -62,21 +63,21 @@ async def resolve_defense(
     pending = get_pending_attack(connection, attack_id)
     if pending is None:
         await interaction.response.send_message(
-            "Erro: este ataque não existe mais.",
+            tr("Error: this attack no longer exists."),
             ephemeral=True,
         )
         return
 
     if not _can_defend(interaction.user, pending, dm_id):
         await interaction.response.send_message(
-            "Erro: apenas o alvo do ataque ou o mestre podem defender.",
+            tr("Error: only the attack target or the GM can defend."),
             ephemeral=True,
         )
         return
 
     if not waive and nh_override is None and defense_value is None:
         await interaction.response.send_message(
-            "Erro: informe um NH de defesa.",
+            tr("Error: enter a defense skill."),
             ephemeral=True,
         )
         return
@@ -91,7 +92,7 @@ async def resolve_defense(
             expire_pending_attack(connection, attack_id)
             connection.commit()
         await interaction.followup.send(
-            "Este ataque já foi resolvido, substituído ou expirou.",
+            tr("This attack was already resolved, superseded, or expired."),
             ephemeral=True,
         )
         return
@@ -152,7 +153,7 @@ async def resolve_defense(
             if remaining_uses <= 0:
                 connection.rollback()
                 await interaction.followup.send(
-                    "Esta defesa já foi usada neste turno.",
+                    tr("This defense has already been used this turn."),
                     ephemeral=True,
                 )
                 return
@@ -244,10 +245,13 @@ async def resolve_defense(
                 event_type="defense",
                 actor_character_id=target_character_id,
                 target_character_id=claimed.get("attacker_character_id"),
-                description=(
-                    f"{profile['name']} tentou {defense_label} "
-                    f"(tentativa {attempt_number}/{max_attempts}): "
-                    f"{_roll_result_text(outcome)}."
+                description=tr(
+                    "{target} attempted {defense} (attempt {attempt}/{maximum}): {result}.",
+                    target=profile["name"],
+                    defense=defense_label,
+                    attempt=attempt_number,
+                    maximum=max_attempts,
+                    result=_roll_result_text(outcome),
                 ),
             )
             connection.commit()
@@ -311,9 +315,11 @@ async def resolve_defense(
                 event_type="defense",
                 actor_character_id=target_character_id,
                 target_character_id=claimed.get("attacker_character_id"),
-                description=(
-                    f"{profile['name']} usou {defense_label}: "
-                    f"{'desistiu' if waive else _roll_result_text(outcome)}."
+                description=tr(
+                    "{target} used {defense}: {result}.",
+                    target=profile["name"],
+                    defense=defense_label,
+                    result=tr("waived") if waive else _roll_result_text(outcome),
                 ),
             )
             if injury_data is not None:
@@ -327,9 +333,10 @@ async def resolve_defense(
                     value=int(injury_data["final_injury"]),
                     hp_before=old_pv,
                     hp_after=new_pv,
-                    description=(
-                        f"{profile['name']} sofreu "
-                        f"{injury_data['final_injury']} PV."
+                    description=tr(
+                        "{target} suffered {injury} HP.",
+                        target=profile["name"],
+                        injury=injury_data["final_injury"],
                     ),
                 )
 
@@ -339,7 +346,7 @@ async def resolve_defense(
     except Exception:
         connection.rollback()
         await interaction.followup.send(
-            "Erro ao resolver a defesa. Nenhum dano foi aplicado.",
+            tr("Error resolving defense. No damage was applied."),
             ephemeral=True,
         )
         return
@@ -365,6 +372,7 @@ async def resolve_defense(
             defenses=remaining_options,
             repeat_callback=repeat_callback,
             resolve_callback=resolve_defense,
+            locale=get_locale(),
         )
     else:
         rd_result = compute_armor_dr(
@@ -390,6 +398,7 @@ async def resolve_defense(
             claimed=claimed,
             dm_id=dm_id,
             repeat_callback=repeat_callback,
+            locale=get_locale(),
         )
 
     try:

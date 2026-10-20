@@ -23,13 +23,21 @@ from utils.db_functions import (
     get_character_strength,
     get_character_thumbnail_by_id,
 )
+from utils.i18n import (
+    catalog_label,
+    catalog_label_from_value,
+    get_locale,
+    locale_context,
+    t as tr,
+)
+from utils.locale_service import apply_interaction_locale
 
 
 def _badge_label(is_equipped: bool) -> str:
     """Renders the plain ASCII equipment status badge for field names."""
     if is_equipped:
-        return "[EQUIPADO]"
-    return "[GUARDADO]"
+        return catalog_label("equipment_badges", "equipped")
+    return catalog_label("equipment_badges", "stored")
 
 
 def _stat(label: str, value: str, value_color: str = NEUTRAL_COLOR) -> str:
@@ -42,18 +50,18 @@ def _encumbrance_level(total_weight: float, strength: int) -> tuple[str, int, st
     basic_lift = (strength * strength) / 10.0
 
     thresholds = [
-        (basic_lift, "Nenhuma", 0, SUCCESS_COLOR),
-        (basic_lift * 2, "Leve", -1, WARN_COLOR),
-        (basic_lift * 3, "Média", -2, DANGER_COLOR),
-        (basic_lift * 6, "Pesada", -3, DANGER_COLOR),
-        (basic_lift * 10, "Muito Pesada", -4, DANGER_COLOR),
+        (basic_lift, catalog_label("encumbrance", "none"), 0, SUCCESS_COLOR),
+        (basic_lift * 2, catalog_label("encumbrance", "light"), -1, WARN_COLOR),
+        (basic_lift * 3, catalog_label("encumbrance", "medium"), -2, DANGER_COLOR),
+        (basic_lift * 6, catalog_label("encumbrance", "heavy"), -3, DANGER_COLOR),
+        (basic_lift * 10, catalog_label("encumbrance", "extra_heavy"), -4, DANGER_COLOR),
     ]
 
     for limit, label, penalty, color in thresholds:
         if total_weight <= limit:
             return label, penalty, color
 
-    return "Muito Pesada", -4, DANGER_COLOR
+    return catalog_label("encumbrance", "extra_heavy"), -4, DANGER_COLOR
 
 
 MELEE_FIELD_BUDGET = 950
@@ -95,9 +103,9 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
         item_weight = weapon["weight"] * weapon["quantity"]
         total_weight += item_weight
 
-        header = _stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)
+        header = _stat(tr("Weight"), f'{item_weight:.2f} kg', ACCENT_COLOR)
         if weapon["min_st"] > 0:
-            header += f"  {_stat('ST Mín', str(weapon['min_st']))}"
+            header += f"  {_stat(tr('Min ST'), str(weapon['min_st']))}"
 
         mode_lines = []
         for mode in weapon["modes"]:
@@ -106,30 +114,36 @@ def _build_melee_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]:
                 if mode["damage_modifier"] != 0
                 else ""
             )
-            dmg_display = (
-                f"{mode['damage_base']}{dmg_sign} {mode['damage_type']}".strip()
-            )
+            damage_base = catalog_label_from_value("damage_bases", mode["damage_base"])
+            raw_damage_type = str(mode["damage_type"] or "")
+            damage_type = catalog_label_from_value("damage_types", raw_damage_type)
+            if raw_damage_type and raw_damage_type == raw_damage_type.lower():
+                damage_type = damage_type.lower()
+            dmg_display = f"{damage_base}{dmg_sign} {damage_type}".strip()
             notes = (
                 f" {ansi('(' + mode['notes'] + ')', NEUTRAL_COLOR)}"
                 if mode["notes"]
                 else ""
             )
 
+            mode_name = catalog_label_from_value("mode_names", mode["mode_name"])
+            parry = catalog_label_from_value("parry", mode["parry"])
             mode_lines.append(
-                f"{ansi(mode['mode_name'] + ':', MODE_COLOR)} "
+                f"{ansi(mode_name + ':', MODE_COLOR)} "
                 f"{ansi(dmg_display, DANGER_COLOR)} | "
-                f"{ansi('Alc', LABEL_COLOR)} {sanitize(mode['reach'])} | "
-                f"{ansi('Ap', LABEL_COLOR)} {sanitize(mode['parry'])}{notes}"
+                f"{ansi(tr('Reach'), LABEL_COLOR)} {sanitize(mode['reach'])} | "
+                f"{ansi(tr('Parry'), LABEL_COLOR)} {sanitize(parry)}{notes}"
             )
 
+        display_weapon_name = catalog_label_from_value("weapon_names", weapon["name"])
         weapon_name = (
             f"{_badge_label(weapon['is_equipped'])} "
-            f"{weapon['name']} (x{weapon['quantity']})"
+            f"{display_weapon_name} (x{weapon['quantity']})"
         )
 
         for index, chunk in enumerate(_chunk_melee_mode_lines(header, mode_lines)):
             field_name = (
-                weapon_name if index == 0 else f"{weapon_name} - Modos (cont.)"
+                weapon_name if index == 0 else f"{weapon_name} - {tr('Modes (cont.)')}"
             )
             fields.append((field_name, code_block(chunk)))
 
@@ -150,9 +164,9 @@ def _build_ranged_fields(data: dict) -> tuple[list[tuple[str, str]], float, int]
         range_display = f"{weapon['range_half']}/{weapon['range_max']}"
 
         lines = [
-            _stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR),
-            f"{_stat('Dano', weapon['damage'], DANGER_COLOR)} | {_stat('Precisão', str(weapon['acc']))}",
-            f"{_stat('Alcance', range_display)} | {_stat('Tiros', str(weapon['shots']))}",
+            _stat(tr("Weight"), f'{item_weight:.2f} kg', ACCENT_COLOR),
+            f"{_stat(tr('Damage'), weapon['damage'], DANGER_COLOR)} | {_stat(tr('Accuracy'), str(weapon['acc']))}",
+            f"{_stat(tr('Range'), range_display)} | {_stat(tr('Shots'), str(weapon['shots']))}",
         ]
 
         fields.append(
@@ -184,10 +198,11 @@ def _build_armor_fields(
 
         dr_display = f"{armor['dr']}*" if armor["is_flexible"] else f"{armor['dr']}"
 
+        location = catalog_label_from_value("body_parts", armor["location"])
         lines = [
-            f"{_stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
-            f"{_stat('Valor', f'$ {item_cost:.2f}', SUCCESS_COLOR)}",
-            f"{_stat('RD', dr_display, INFO_COLOR)} | {_stat('Local', armor['location'])}",
+            f"{_stat(tr('Weight'), f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
+            f"{_stat(tr('Value'), f'$ {item_cost:.2f}', SUCCESS_COLOR)}",
+            f"{_stat(tr('DR'), dr_display, INFO_COLOR)} | {_stat(tr('Location'), location)}",
         ]
 
         fields.append(
@@ -213,8 +228,8 @@ def _build_item_fields(data: dict) -> tuple[list[tuple[str, str]], float]:
         quantity_display = str(item["quantity"])
 
         lines = [
-            f"{_stat('Peso', f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
-            f"{_stat('Qtd', f'x{quantity_display}')}"
+            f"{_stat(tr('Weight'), f'{item_weight:.2f} kg', ACCENT_COLOR)} | "
+            f"{_stat(tr('Qty'), f'x{quantity_display}')}"
         ]
         if item["description"]:
             lines.append(ansi(item["description"], NEUTRAL_COLOR))
@@ -233,19 +248,19 @@ def _build_summary_page(
 ) -> dict:
     """Builds the golden summary page with the core inventory metrics."""
     if item_count == 0:
-        description = "*Nenhum equipamento ou item registrado.*"
+        description = f"*{tr('No equipment or items recorded.')}*"
     else:
-        description = "*Registro de equipamento e carga do personagem.*"
+        description = f"*{tr('Equipment and load record for the character.')}*"
 
     fields = [
-        ("Dinheiro", code_block([ansi(f"$ {data['money']}", SUCCESS_COLOR)]), True),
+        (tr("Money"), code_block([ansi(f"$ {data['money']}", SUCCESS_COLOR)]), True),
         (
-            "Peso Total",
+            tr("Total Weight"),
             code_block([ansi(f"{total_weight:.2f} kg", ACCENT_COLOR)]),
             True,
         ),
-        ("Equipados", code_block([ansi(str(equipped_count), SUCCESS_COLOR)]), True),
-        ("Itens", code_block([ansi(str(item_count), NEUTRAL_COLOR)]), True),
+        (tr("Equipped"), code_block([ansi(str(equipped_count), SUCCESS_COLOR)]), True),
+        (tr("Items"), code_block([ansi(str(item_count), NEUTRAL_COLOR)]), True),
     ]
 
     if strength is not None:
@@ -253,14 +268,14 @@ def _build_summary_page(
         penalty_text = f" ({penalty})" if penalty else ""
         fields.append(
             (
-                "Carga",
+                tr("Load"),
                 code_block([ansi(f"{label}{penalty_text}", color)]),
                 True,
             )
         )
 
     return {
-        "title": f"Inventário: {data['character_name']}",
+        "title": tr("Inventory: {character}", character=data["character_name"]),
         "color": discord.Color.gold(),
         "description": description,
         "fields": fields,
@@ -312,7 +327,7 @@ def _append_category_pages(
 
     total_items = len(fields) if item_count is None else item_count
     base_title = f"{title}: {character_name}"
-    count_label = "item" if total_items == 1 else "itens"
+    count_label = tr("item") if total_items == 1 else tr("items")
     description = f"*{total_items} {count_label} - {weight:.2f} kg*"
     if legend:
         description += f"\n{legend}"
@@ -320,7 +335,7 @@ def _append_category_pages(
     for index, chunk in enumerate(_paginate_fields(fields, base_title, description)):
         pages.append(
             {
-                "title": base_title if index == 0 else f"{base_title} (continuação)",
+                "title": base_title if index == 0 else f"{base_title} ({tr('continuation')})",
                 "color": color,
                 "description": description if index == 0 else None,
                 "fields": [(name, value, False) for name, value in chunk],
@@ -328,8 +343,15 @@ def _append_category_pages(
         )
 
 
-def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]:
+def build_inventory_pages(
+    data: dict, strength: int | None = None, locale: str | None = None
+) -> list[dict]:
     """Builds the paginated inventory pages with ANSI colored item fields."""
+    with locale_context(locale or get_locale()):
+        return _build_inventory_pages(data, strength)
+
+
+def _build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]:
     melee_fields, melee_weight, melee_equipped = _build_melee_fields(data)
     ranged_fields, ranged_weight, ranged_equipped = _build_ranged_fields(data)
     armor_fields, armor_weight, armor_equipped, has_flexible = _build_armor_fields(data)
@@ -351,7 +373,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
     _append_category_pages(
         pages,
         data["character_name"],
-        "Armas Corpo a Corpo",
+        tr("Melee Weapons"),
         discord.Color.dark_red(),
         melee_fields,
         melee_weight,
@@ -360,7 +382,7 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
     _append_category_pages(
         pages,
         data["character_name"],
-        "Armas a Distância",
+        tr("Ranged Weapons"),
         discord.Color.dark_teal(),
         ranged_fields,
         ranged_weight,
@@ -369,17 +391,17 @@ def build_inventory_pages(data: dict, strength: int | None = None) -> list[dict]
     _append_category_pages(
         pages,
         data["character_name"],
-        "Armaduras",
+        tr("Armor"),
         discord.Color.dark_blue(),
         armor_fields,
         armor_weight,
-        "* RD flexível" if has_flexible else None,
+        f"* {tr('Flexible DR')}" if has_flexible else None,
         item_count=len(data["armors"]),
     )
     _append_category_pages(
         pages,
         data["character_name"],
-        "Itens Gerais",
+        tr("General Items"),
         discord.Color.dark_grey(),
         item_fields,
         item_weight,
@@ -398,37 +420,40 @@ class InventoryView(discord.ui.View):
         author_id: int,
         thumbnail_url: str | None = None,
         back_callback=None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=None)
         self.pages = pages
         self.author_id = author_id
         self.thumbnail_url = thumbnail_url
         self.back_callback = back_callback
+        self.locale = locale
         self.current_page = 0
 
-        self.previous_button = discord.ui.Button(
-            label="< Anterior",
-            style=discord.ButtonStyle.secondary,
-        )
-        self.previous_button.callback = self.previous_page
-        self.add_item(self.previous_button)
-
-        self.next_button = discord.ui.Button(
-            label="Próxima >",
-            style=discord.ButtonStyle.secondary,
-        )
-        self.next_button.callback = self.next_page
-        self.add_item(self.next_button)
-
-        if back_callback is not None:
-            back_button = discord.ui.Button(
-                label="Voltar",
+        with locale_context(self.locale or get_locale()):
+            self.previous_button = discord.ui.Button(
+                label=f"< {tr('Previous')}",
                 style=discord.ButtonStyle.secondary,
             )
-            back_button.callback = self.go_back
-            self.add_item(back_button)
+            self.previous_button.callback = self.previous_page
+            self.add_item(self.previous_button)
 
-        self._sync_buttons()
+            self.next_button = discord.ui.Button(
+                label=f"{tr('Next')} >",
+                style=discord.ButtonStyle.secondary,
+            )
+            self.next_button.callback = self.next_page
+            self.add_item(self.next_button)
+
+            if back_callback is not None:
+                back_button = discord.ui.Button(
+                    label=tr("Back"),
+                    style=discord.ButtonStyle.secondary,
+                )
+                back_button.callback = self.go_back
+                self.add_item(back_button)
+
+            self._sync_buttons()
 
     def _sync_buttons(self) -> None:
         """Refreshes the navigation button states for the current page."""
@@ -437,6 +462,10 @@ class InventoryView(discord.ui.View):
 
     def build_embed(self) -> discord.Embed:
         """Renders the current page as a single clamped embed with page footer."""
+        with locale_context(self.locale or get_locale()):
+            return self._build_embed()
+
+    def _build_embed(self) -> discord.Embed:
         page = self.pages[self.current_page]
 
         embed = discord.Embed(
@@ -457,18 +486,25 @@ class InventoryView(discord.ui.View):
         if self.thumbnail_url:
             embed.set_thumbnail(url=self.thumbnail_url)
 
-        embed.set_footer(text=f"Página {self.current_page + 1} de {len(self.pages)}")
+        embed.set_footer(
+            text=tr(
+                "Page {current} of {total}",
+                current=self.current_page + 1,
+                total=len(self.pages),
+            )
+        )
         return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Restricts interaction to the user who invoked the command."""
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "Erro: Apenas o usuário que invocou o comando pode interagir com este menu.",
-                ephemeral=True,
-            )
-            return False
-        return True
+        with locale_context(self.locale or get_locale()):
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    tr("Error: only the user who invoked this command can interact with this menu."),
+                    ephemeral=True,
+                )
+                return False
+            return True
 
     async def previous_page(self, interaction: discord.Interaction):
         """Moves the view to the previous inventory page."""
@@ -535,7 +571,12 @@ class Inventory(commands.Cog):
 
     @app_commands.command(
         name="manage_money",
-        description="Adiciona ou remove dinheiro do inventário do personagem.",
+        description="Add or remove money from a character's inventory.",
+    )
+    @app_commands.rename(character="character", money="money")
+    @app_commands.describe(
+        character="Character that will receive the transaction.",
+        money="Amount to add or remove.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.default_permissions(administrator=True)
@@ -543,13 +584,14 @@ class Inventory(commands.Cog):
         self, interaction: discord.Interaction, character: str, money: int
     ):
         """Modifies a character's financial balance atomically within the database layer."""
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=True)
 
         try:
             target_character_id = int(character)
         except ValueError:
             await interaction.followup.send(
-                "**Erro de processamento:** O identificador do personagem fornecido é inválido.",
+                tr("**Processing error:** the supplied character identifier is invalid."),
                 ephemeral=True,
             )
             return
@@ -563,7 +605,10 @@ class Inventory(commands.Cog):
 
         if row is None:
             await interaction.followup.send(
-                f"**Erro de consistência:** Nenhuma entidade foi localizada sob o ID `{target_character_id}`.",
+                tr(
+                    "**Consistency error:** no entity was found under ID `{character_id}`.",
+                    character_id=target_character_id,
+                ),
                 ephemeral=True,
             )
             return
@@ -579,21 +624,29 @@ class Inventory(commands.Cog):
         self.db_connection.commit()
 
         finance_embed = discord.Embed(
-            title=f"MUTAÇÃO PATRIMONIAL: {character_name}",
+            title=tr("ASSET CHANGE: {character}", character=character_name),
             color=discord.Color.green() if money >= 0 else discord.Color.red(),
         )
 
-        transaction_type = "Entrada" if money >= 0 else "Saída"
+        transaction_type = tr("Income") if money >= 0 else tr("Expense")
 
         finance_embed.add_field(
-            name="Transação Homologada",
-            value=f"Tipo: `{transaction_type}`\nFluxo: `{money:+d} $`",
+            name=tr("Approved Transaction"),
+            value=tr(
+                "Type: `{type}`\nFlow: `{money:+d} $`",
+                type=transaction_type,
+                money=money,
+            ),
             inline=False,
         )
 
         finance_embed.add_field(
-            name="Demonstrativo de Saldos",
-            value=f"Anterior: `{previous_balance} $`\nAtualizado: `{updated_balance} $`",
+            name=tr("Balance Statement"),
+            value=tr(
+                "Previous: `{previous} $`\nUpdated: `{updated} $`",
+                previous=previous_balance,
+                updated=updated_balance,
+            ),
             inline=False,
         )
 
@@ -613,10 +666,11 @@ class Inventory(commands.Cog):
 
     @app_commands.command(
         name="inventory",
-        description="Exibe o inventário completo, armas, armaduras e equipamentos do seu personagem.",
+        description="Display your character's complete inventory, weapons, armor, and equipment.",
     )
     async def view_inventory(self, interaction: discord.Interaction):
         """Displays the paginated character inventory using the persistent connection."""
+        locale = apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=True)
 
         data = get_character_inventory_data(
@@ -625,7 +679,7 @@ class Inventory(commands.Cog):
 
         if not data:
             await interaction.followup.send(
-                "**Você não possui um personagem ativo atribuído à sua conta!**",
+                tr("**You do not have an active character assigned to your account!**"),
                 ephemeral=True,
             )
             return
@@ -635,7 +689,7 @@ class Inventory(commands.Cog):
         except ValueError:
             strength = None
 
-        pages = build_inventory_pages(data, strength)
+        pages = build_inventory_pages(data, strength, locale)
         character_file, thumbnail_url = get_character_thumbnail_by_id(
             self.db_connection, data["character_id"]
         )
@@ -643,6 +697,7 @@ class Inventory(commands.Cog):
             pages=pages,
             author_id=interaction.user.id,
             thumbnail_url=thumbnail_url,
+            locale=locale,
         )
 
         if character_file is not None:

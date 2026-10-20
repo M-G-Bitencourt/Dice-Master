@@ -21,6 +21,8 @@ from cogs.combat_helpers.combat_support import (
 )
 from cogs.combat_helpers.combat_views import CombatPanelView
 from utils.combat import HIT_LOCATIONS, MANEUVERS
+from utils.i18n import catalog_label, get_locale, t as tr
+from utils.locale_service import apply_interaction_locale
 from utils.db_functions import (
     _resolve_character_id,
     add_combat_log,
@@ -117,7 +119,7 @@ class Combat(commands.Cog):
         character_id = int(character_option)
         if not self._can_manage_character(interaction, character_id):
             raise ValueError(
-                "Você não pode gerenciar efeitos deste personagem."
+                "You cannot manage effects for this character."
             )
         return character_id
 
@@ -270,6 +272,7 @@ class Combat(commands.Cog):
         current: str,
     ) -> list[app_commands.Choice[str]]:
         """List the caller's skills for ranged attack selection."""
+        apply_interaction_locale(interaction, self.db_connection)
         try:
             character_id = _resolve_character_id(
                 self.db_connection, interaction.user.id
@@ -286,7 +289,7 @@ class Combat(commands.Cog):
         pattern = current.strip().casefold()
         choices = []
         for skill in data["skills"]:
-            label = f"{skill['name']} (NH {skill['nh']})"
+            label = f"{skill['name']} ({tr('Skill')} {skill['nh']})"
             if pattern and pattern not in label.casefold():
                 continue
             choices.append(
@@ -307,7 +310,7 @@ class Combat(commands.Cog):
         if actor_option is not None:
             if not self._is_gm(interaction):
                 raise ValueError(
-                    "Apenas o mestre pode escolher outro personagem como ator."
+                    "Only the GM can choose another character as the actor."
                 )
             actor_character_id = int(actor_option)
             if (
@@ -315,7 +318,7 @@ class Combat(commands.Cog):
                 and weapon_character_id != actor_character_id
             ):
                 raise ValueError(
-                    "A arma escolhida não pertence ao personagem informado."
+                    "The selected weapon does not belong to the specified character."
                 )
             return actor_character_id
 
@@ -331,7 +334,7 @@ class Combat(commands.Cog):
         )
         if not modes:
             raise ValueError(
-                "O personagem não possui arma corpo a corpo equipada."
+                "The character has no equipped melee weapon."
             )
 
         if weapon_value is None:
@@ -341,13 +344,13 @@ class Combat(commands.Cog):
             _, raw_mode_id = weapon_value.split(":", 1)
             mode_id = int(raw_mode_id)
         except (ValueError, AttributeError):
-            raise ValueError("A arma selecionada é inválida.")
+            raise ValueError("The selected weapon is invalid.")
 
         for mode in modes:
             if int(mode["mode_id"]) == mode_id:
                 return mode
 
-        raise ValueError("A arma selecionada não está equipada no personagem.")
+        raise ValueError("The selected weapon is not equipped by the character.")
 
     def _find_ranged_weapon(
         self, actor_character_id: int, weapon_value: str | None
@@ -358,7 +361,7 @@ class Combat(commands.Cog):
         )
         if not weapons:
             raise ValueError(
-                "O personagem não possui arma à distância equipada."
+                "The character has no equipped ranged weapon."
             )
 
         if weapon_value is None:
@@ -367,14 +370,14 @@ class Combat(commands.Cog):
         try:
             ranged_weapon_id = int(str(weapon_value).rsplit(":", 1)[-1])
         except (ValueError, AttributeError):
-            raise ValueError("A arma à distância selecionada é inválida.")
+            raise ValueError("The selected ranged weapon is invalid.")
 
         for weapon in weapons:
             if int(weapon["ranged_weapon_id"]) == ranged_weapon_id:
                 return weapon
 
         raise ValueError(
-            "A arma à distância selecionada não está equipada no personagem."
+            "The selected ranged weapon is not equipped by the character."
         )
 
     def _find_skill_by_id(self, data: dict, skill_id: str | None) -> dict | None:
@@ -430,6 +433,7 @@ class Combat(commands.Cog):
             ),
             guild_id=session.get("guild_id") if session else None,
             dm_id=self.dm_id,
+            locale=get_locale(),
         )
         return embed, view
 
@@ -483,9 +487,10 @@ class Combat(commands.Cog):
 
     @app_commands.command(
         name="combat_start",
-        description="Cria ou reabre o painel de combate deste canal.",
+        description="Create or reopen the combat panel for this channel.",
     )
     async def combat_start(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         with self.db_connection:
             session = get_or_create_combat_session(
                 self.db_connection,
@@ -495,7 +500,7 @@ class Combat(commands.Cog):
 
         if await self._edit_stored_panel(session):
             await interaction.response.send_message(
-                "Painel de combate atualizado.", ephemeral=True
+                tr("Combat panel updated."), ephemeral=True
             )
             return
 
@@ -509,12 +514,13 @@ class Combat(commands.Cog):
 
     @app_commands.command(
         name="combat_end",
-        description="Encerra o combate e descarta o ataque pendente.",
+        description="End the combat and discard the pending attack.",
     )
     async def combat_end(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         if not self._is_gm(interaction):
             await interaction.response.send_message(
-                "Erro: apenas o mestre pode encerrar o combate.",
+                tr("Error: only the GM can end the combat."),
                 ephemeral=True,
             )
             return
@@ -525,24 +531,27 @@ class Combat(commands.Cog):
             supersede_pending_attacks(self.db_connection, interaction.channel_id)
 
         await interaction.followup.send(
-            "Combate encerrado e ataque pendente descartado.",
+            tr("Combat ended and pending attack discarded."),
             ephemeral=True,
         )
 
     @app_commands.command(
         name="combat_manage_effect",
-        description="Adiciona ou remove um efeito do catálogo externo em um personagem.",
+        description="Add or remove an external catalog effect on a character.",
     )
     @app_commands.autocomplete(personagem=character_autocomplete)
+    @app_commands.rename(
+        acao="action", efeito_id="effect_id", personagem="character"
+    )
     @app_commands.describe(
-        acao="Adicionar ou remover o efeito.",
-        efeito_id="ID do efeito no catálogo externo.",
-        personagem="Personagem alvo. Jogadores usam o próprio personagem.",
+        acao="Add or remove the effect.",
+        efeito_id="Effect ID in the external catalog.",
+        personagem="Target character. Players use their own character.",
     )
     @app_commands.choices(
         acao=[
-            app_commands.Choice(name="Adicionar", value="add"),
-            app_commands.Choice(name="Remover", value="remove"),
+            app_commands.Choice(name="Add", value="add"),
+            app_commands.Choice(name="Remove", value="remove"),
         ]
     )
     async def combat_effect(
@@ -552,6 +561,7 @@ class Combat(commands.Cog):
         efeito_id: int,
         personagem: str | None = None,
     ):
+        apply_interaction_locale(interaction, self.db_connection)
         await perform_effect_change(
             self,
             interaction,
@@ -562,13 +572,14 @@ class Combat(commands.Cog):
 
     @app_commands.command(
         name="combat_enter",
-        description="Adiciona um personagem ao combate com iniciativa.",
+        description="Add a character to the combat with initiative.",
     )
     @app_commands.autocomplete(personagem=character_autocomplete)
+    @app_commands.rename(personagem="character", iniciativa="initiative")
     @app_commands.describe(
-        personagem="Personagem que entrará no combate. Jogadores usam o próprio.",
+        personagem="Character that will join the combat. Players use their own.",
         iniciativa=(
-            "Iniciativa (aceita decimais); se omitida, usa a Velocidade Básica."
+            "Initiative (decimals allowed); defaults to Basic Speed."
         ),
     )
     async def combat_enter(
@@ -577,6 +588,7 @@ class Combat(commands.Cog):
         personagem: str | None = None,
         iniciativa: float | None = None,
     ):
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=True)
         try:
             character_id = self._resolve_managed_character(
@@ -587,14 +599,14 @@ class Combat(commands.Cog):
             )
         except (ValueError, TypeError) as error:
             await interaction.followup.send(
-                f"Erro: {_friendly_character_error(error)}",
+                tr("Error: {detail}", detail=_friendly_character_error(error)),
                 ephemeral=True,
             )
             return
 
         if iniciativa is not None and not 0 <= iniciativa <= 99:
             await interaction.followup.send(
-                "Erro: a iniciativa deve estar entre 0 e 99.",
+                tr("Error: initiative must be between 0 and 99."),
                 ephemeral=True,
             )
             return
@@ -638,7 +650,9 @@ class Combat(commands.Cog):
                 channel_id=interaction.channel_id,
                 event_type="enter",
                 actor_character_id=character_id,
-                description=f"{profile['name']} entrou no combate.",
+                description=tr(
+                    "{character} entered the combat.", character=profile["name"]
+                ),
             )
 
         session = get_active_combat_session(
@@ -651,23 +665,27 @@ class Combat(commands.Cog):
                 )
 
         await interaction.followup.send(
-            f"**{profile['name']}** entrou no combate com iniciativa "
-            f"`{initiative_value:g}`.",
+            tr(
+                "**{character}** entered the combat with initiative `{initiative}`.",
+                character=profile["name"],
+                initiative=f"{initiative_value:g}",
+            ),
             ephemeral=True,
         )
 
     @app_commands.command(
         name="combat_next_turn",
-        description="Encerra o turno atual e passa para o próximo participante.",
+        description="End the current turn and advance to the next participant.",
     )
     async def combat_next_turn(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         await interaction.response.defer(ephemeral=True)
         session = get_active_combat_session(
             self.db_connection, interaction.channel_id
         )
         if session is None:
             await interaction.followup.send(
-                "Erro: não existe combate ativo neste canal.",
+                tr("Error: there is no active combat in this channel."),
                 ephemeral=True,
             )
             return
@@ -680,7 +698,7 @@ class Combat(commands.Cog):
             )
         ):
             await interaction.followup.send(
-                "Erro: apenas o participante ativo ou o mestre podem avançar o turno.",
+                tr("Error: only the active participant or the GM can advance the turn."),
                 ephemeral=True,
             )
             return
@@ -691,7 +709,7 @@ class Combat(commands.Cog):
             )
         except ValueError as error:
             await interaction.followup.send(
-                f"Erro: {error}",
+                tr("Error: {detail}", detail=_friendly_character_error(error)),
                 ephemeral=True,
             )
             return
@@ -707,19 +725,23 @@ class Combat(commands.Cog):
                 )
 
         await interaction.followup.send(
-            f"Turno de **{next_participant['character_name']}** "
-            f"(rodada {round_number}).",
+            tr(
+                "Turn of **{character}** (round {round}).",
+                character=next_participant["character_name"],
+                round=round_number,
+            ),
             ephemeral=True,
         )
 
     @app_commands.command(
         name="combat_undo",
-        description="Desfaz o último dano aplicado neste canal.",
+        description="Undo the last damage applied in this channel.",
     )
     async def combat_undo(self, interaction: discord.Interaction):
+        apply_interaction_locale(interaction, self.db_connection)
         if not self._is_gm(interaction):
             await interaction.response.send_message(
-                "Erro: apenas o mestre pode desfazer dano.",
+                tr("Error: only the GM can undo damage."),
                 ephemeral=True,
             )
             return
@@ -737,7 +759,7 @@ class Combat(commands.Cog):
         )
         if log_entry is None:
             await interaction.followup.send(
-                "Erro: nenhum dano pendente de reversão.",
+                tr("Error: no damage is pending reversal."),
                 ephemeral=True,
             )
             return
@@ -749,7 +771,7 @@ class Combat(commands.Cog):
             )
         except ValueError:
             await interaction.followup.send(
-                "Erro: personagem do dano não foi localizado.",
+                tr("Error: damage target character was not found."),
                 ephemeral=True,
             )
             return
@@ -757,7 +779,7 @@ class Combat(commands.Cog):
         current_pv = int(profile.get("current_pv") or 0)
         if current_pv != int(log_entry["hp_after"]):
             await interaction.followup.send(
-                "Erro: o PV do alvo mudou desde esse dano; reversão cancelada.",
+                tr("Error: the target HP changed since that damage; reversal cancelled."),
                 ephemeral=True,
             )
             return
@@ -780,10 +802,12 @@ class Combat(commands.Cog):
                 value=int(log_entry["value"] or 0),
                 hp_before=int(log_entry["hp_after"]),
                 hp_after=int(log_entry["hp_before"]),
-                description=(
-                    f"Dano de {log_entry['value']} desfeito em "
-                    f"{profile['name']} (PV {log_entry['hp_after']} -> "
-                    f"{log_entry['hp_before']})."
+                description=tr(
+                    "Damage of {damage} undone on {target} (HP {after} -> {before}).",
+                    damage=log_entry["value"],
+                    target=profile["name"],
+                    after=log_entry["hp_after"],
+                    before=log_entry["hp_before"],
                 ),
             )
 
@@ -797,27 +821,38 @@ class Combat(commands.Cog):
                 )
 
         await interaction.followup.send(
-            f"Dano desfeito: **{profile['name']}** voltou a "
-            f"`{log_entry['hp_before']}` PV.",
+            tr(
+                "Damage undone: **{character}** returned to `{hp}` HP.",
+                character=profile["name"],
+                hp=log_entry["hp_before"],
+            ),
             ephemeral=True,
         )
 
     @app_commands.command(
         name="combat_feint",
-        description="Executa uma finta e aplica penalidade à próxima defesa do alvo.",
+        description="Perform a feint and penalize the target's next defense.",
     )
     @app_commands.autocomplete(
         alvo=participant_autocomplete,
         personagem=participant_autocomplete,
         pericia=skill_autocomplete,
     )
+    @app_commands.rename(
+        alvo="target",
+        personagem="character",
+        pericia="skill",
+        nh_manual="manual_skill",
+        defesa="defense",
+        modificador="modifier",
+    )
     @app_commands.describe(
-        alvo="Personagem alvo da finta.",
-        personagem="Apenas para o mestre: personagem que está fintando.",
-        pericia="Perícia de combate usada na finta.",
-        nh_manual="Substitui o NH calculado pela perícia.",
-        defesa="NH de resistência do alvo. Se omitido, usa a melhor perícia de combate.",
-        modificador="Modificador situacional adicional de NH.",
+        alvo="Target character of the feint.",
+        personagem="GM only: character performing the feint.",
+        pericia="Combat skill used for the feint.",
+        nh_manual="Overrides the skill level calculated from the skill.",
+        defesa="Target resistance skill. Defaults to the best combat skill.",
+        modificador="Additional situational skill modifier.",
     )
     async def combat_feint(
         self,
@@ -829,6 +864,7 @@ class Combat(commands.Cog):
         defesa: int | None = None,
         modificador: int | None = None,
     ):
+        apply_interaction_locale(interaction, self.db_connection)
         await perform_feint(
             self,
             interaction,
@@ -842,32 +878,43 @@ class Combat(commands.Cog):
 
     @app_commands.command(
         name="combat_attack",
-        description="Ataca com uma arma equipada usando NH, dano e defesa automáticos.",
+        description="Attack with an equipped weapon using automatic skill, damage, and defense.",
     )
     @app_commands.autocomplete(
         alvo=participant_autocomplete,
         arma=weapon_autocomplete,
         personagem=participant_autocomplete,
     )
+    @app_commands.rename(
+        alvo="target",
+        arma="weapon",
+        personagem="character",
+        local="hit_location",
+        manobra="maneuver",
+        modificador="modifier",
+        nh_manual="manual_skill",
+    )
     @app_commands.describe(
-        alvo="Personagem alvo do ataque.",
-        arma="Arma equipada. Se omitido, usa a primeira arma corpo a corpo equipada.",
-        personagem="Apenas para o mestre: personagem que está atacando.",
-        local="Local atingido.",
-        manobra="Manobra de combate aplicada.",
-        modificador="Modificador situacional adicional de NH.",
-        nh_manual="Substitui o NH calculado pela arma.",
+        alvo="Target character of the attack.",
+        arma="Equipped weapon. Defaults to the first equipped melee weapon.",
+        personagem="GM only: character performing the attack.",
+        local="Hit location.",
+        manobra="Combat maneuver applied.",
+        modificador="Additional situational skill modifier.",
+        nh_manual="Overrides the skill level calculated from the weapon.",
     )
     @app_commands.choices(
         local=[
             app_commands.Choice(
-                name=f"{location['name']} ({location['penalty']:+d})",
+                name=f"{catalog_label('hit_locations', location['key'], 'en-US')} ({location['penalty']:+d})",
                 value=hit_location_id,
             )
             for hit_location_id, location in HIT_LOCATIONS.items()
         ],
         manobra=[
-            app_commands.Choice(name=maneuver["label"], value=key)
+            app_commands.Choice(
+                name=catalog_label("maneuvers", key, "en-US"), value=key
+            )
             for key, maneuver in MANEUVERS.items()
         ],
     )
@@ -882,6 +929,7 @@ class Combat(commands.Cog):
         modificador: int | None = None,
         nh_manual: int | None = None,
     ):
+        apply_interaction_locale(interaction, self.db_connection)
         await perform_attack(
             self,
             interaction,

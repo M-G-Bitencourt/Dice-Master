@@ -11,6 +11,8 @@ from cogs.spells import SpellListView
 from cogs.traits import TraitListView
 
 from utils.ansi import code_block, resource_bar
+from utils.i18n import catalog_label, get_locale, locale_context, t as tr
+from utils.locale_service import apply_interaction_locale
 from utils.db_functions import (
     get_character_inventory_data_by_id,
     get_character_profile,
@@ -23,8 +25,15 @@ from utils.db_functions import (
 )
 
 
-def build_sheet_embed(character: dict) -> discord.Embed:
+def build_sheet_embed(
+    character: dict, locale: str | None = None
+) -> discord.Embed:
     """Builds the core character sheet embed from a denormalized profile row."""
+    with locale_context(locale or get_locale()):
+        return _build_sheet_embed(character)
+
+
+def _build_sheet_embed(character: dict) -> discord.Embed:
     # Basic Attributes
     st = int(character["st"])
     dx = int(character["dx"])
@@ -42,13 +51,13 @@ def build_sheet_embed(character: dict) -> discord.Embed:
         title=f"**{character['name']}**",
         color=discord.Color.gold(),
         description=(
-            f"**Pontos não Gastos:** `{character['current_points']}`\n"
-            f"**Dinheiro:** `{character['money']}`"
+            f"**{tr('Unspent Points')}:** `{character['current_points']}`\n"
+            f"**{tr('Money')}:** `{character['money']}`"
         ),
     )
 
     sheet_embed.add_field(
-        name="Atributos Básicos",
+        name=tr("Basic Attributes"),
         value=(
             f"**ST:** `{st}`\n"
             f"**DX:** `{dx}`\n"
@@ -60,23 +69,23 @@ def build_sheet_embed(character: dict) -> discord.Embed:
     )
 
     sheet_embed.add_field(
-        name="Características Secundárias",
+        name=tr("Secondary Characteristics"),
         value=(
-            f"PV Máximo: `{max_pv}`\n"
-            f"PF Máximo: `{max_pf}`\n"
-            f"Vontade: `{vont}`\n"
-            f"Percepção: `{per}`\n"
+            f"{tr('Max HP')}: `{max_pv}`\n"
+            f"{tr('Max FP')}: `{max_pf}`\n"
+            f"{tr('Will')}: `{vont}`\n"
+            f"{tr('Perception')}: `{per}`\n"
         ),
         inline=False,
     )
 
     sheet_embed.add_field(
-        name="Recursos Atuais (PV - PF - ER)",
+        name=tr("Current Resources (HP - FP - ER)"),
         value=code_block(
             [
-                resource_bar("PV", int(character["current_pv"]), max_pv),
-                resource_bar("PF", int(character["current_pf"]), max_pf),
-                resource_bar("ER", int(character["current_er"]), base_er),
+                resource_bar(catalog_label("resources", "hp"), int(character["current_pv"]), max_pv),
+                resource_bar(catalog_label("resources", "fp"), int(character["current_pf"]), max_pf),
+                resource_bar(catalog_label("resources", "er"), int(character["current_er"]), base_er),
             ]
         ),
         inline=False,
@@ -113,6 +122,7 @@ class SheetHubView(discord.ui.View):
         author_id: int,
         sheet_embed: discord.Embed,
         strength: int | None = None,
+        locale: str | None = None,
     ):
         super().__init__(timeout=None)
         self.db_connection = db_connection
@@ -120,12 +130,13 @@ class SheetHubView(discord.ui.View):
         self.author_id = author_id
         self.sheet_embed = sheet_embed
         self.strength = strength
+        self.locale = locale
 
         button_specs = [
-            ("Inventário", self.open_inventory),
-            ("Perícias", self.open_skills),
-            ("Vantagens/Desvantagens", self.open_traits),
-            ("Magias", self.open_spells),
+            (tr("Inventory"), self.open_inventory),
+            (tr("Skills"), self.open_skills),
+            (tr("Advantages/Disadvantages"), self.open_traits),
+            (tr("Spells"), self.open_spells),
         ]
 
         for label, callback in button_specs:
@@ -135,15 +146,20 @@ class SheetHubView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Restricts interaction to the user who invoked the command."""
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "Erro: Apenas o usuário que invocou o comando pode interagir com este menu.",
-                ephemeral=True,
-            )
-            return False
-        return True
+        with locale_context(self.locale or get_locale()):
+            if interaction.user.id != self.author_id:
+                await interaction.response.send_message(
+                    tr("Error: only the user who invoked this command can interact with this menu."),
+                    ephemeral=True,
+                )
+                return False
+            return True
 
     async def restore_hub(self, interaction: discord.Interaction):
+        with locale_context(self.locale or get_locale()):
+            return await self._restore_hub(interaction)
+
+    async def _restore_hub(self, interaction: discord.Interaction):
         """Restores the central sheet embed replacing any child inspection view."""
         await interaction.response.defer()
 
@@ -157,6 +173,7 @@ class SheetHubView(discord.ui.View):
             author_id=self.author_id,
             sheet_embed=self.sheet_embed,
             strength=self.strength,
+            locale=self.locale,
         )
 
         await interaction.edit_original_response(
@@ -168,6 +185,10 @@ class SheetHubView(discord.ui.View):
 
     async def open_inventory(self, interaction: discord.Interaction):
         """Renders the paginated inventory pages on the hub message."""
+        with locale_context(self.locale or get_locale()):
+            return await self._open_inventory(interaction)
+
+    async def _open_inventory(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         data = get_character_inventory_data_by_id(
@@ -176,12 +197,12 @@ class SheetHubView(discord.ui.View):
 
         if not data:
             await interaction.followup.send(
-                "Erro de consistência: nenhum inventário associado ao personagem.",
+                tr("Consistency error: no inventory is associated with the character."),
                 ephemeral=True,
             )
             return
 
-        pages = build_inventory_pages(data, self.strength)
+        pages = build_inventory_pages(data, self.strength, self.locale)
 
         character_file, thumbnail_url = get_character_thumbnail_by_id(
             self.db_connection, self.character_id
@@ -192,6 +213,7 @@ class SheetHubView(discord.ui.View):
             author_id=self.author_id,
             thumbnail_url=thumbnail_url,
             back_callback=self.restore_hub,
+            locale=self.locale,
         )
 
         await interaction.edit_original_response(
@@ -203,20 +225,30 @@ class SheetHubView(discord.ui.View):
 
     async def open_skills(self, interaction: discord.Interaction):
         """Renders the paginated skill list on the hub message."""
+        with locale_context(self.locale or get_locale()):
+            return await self._open_skills(interaction)
+
+    async def _open_skills(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         skills_data = get_character_skills_data(self.db_connection, self.character_id)
 
         if not skills_data:
             await interaction.followup.send(
-                f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
+                tr(
+                    "Consistency error: character with ID `{character_id}` was not found.",
+                    character_id=self.character_id,
+                ),
                 ephemeral=True,
             )
             return
 
         if not skills_data["skills"]:
             await interaction.followup.send(
-                f"O personagem {skills_data['character_name']} não possui nenhuma perícia cadastrada.",
+                tr(
+                    "Character {character} has no registered skills.",
+                    character=skills_data["character_name"],
+                ),
                 ephemeral=True,
             )
             return
@@ -226,6 +258,7 @@ class SheetHubView(discord.ui.View):
             skills=skills_data["skills"],
             author_id=self.author_id,
             back_callback=self.restore_hub,
+            locale=self.locale,
         )
 
         await interaction.edit_original_response(
@@ -237,20 +270,30 @@ class SheetHubView(discord.ui.View):
 
     async def open_traits(self, interaction: discord.Interaction):
         """Renders the paginated trait list on the hub message."""
+        with locale_context(self.locale or get_locale()):
+            return await self._open_traits(interaction)
+
+    async def _open_traits(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         traits_data = get_character_traits_data(self.db_connection, self.character_id)
 
         if not traits_data:
             await interaction.followup.send(
-                f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
+                tr(
+                    "Consistency error: character with ID `{character_id}` was not found.",
+                    character_id=self.character_id,
+                ),
                 ephemeral=True,
             )
             return
 
         if not traits_data["advantages"] and not traits_data["disadvantages"]:
             await interaction.followup.send(
-                f"O personagem {traits_data['character_name']} não possui nenhuma vantagem ou desvantagem cadastrada.",
+                tr(
+                    "Character {character} has no registered advantages or disadvantages.",
+                    character=traits_data["character_name"],
+                ),
                 ephemeral=True,
             )
             return
@@ -260,6 +303,7 @@ class SheetHubView(discord.ui.View):
             traits=traits_data["advantages"] + traits_data["disadvantages"],
             author_id=self.author_id,
             back_callback=self.restore_hub,
+            locale=self.locale,
         )
 
         await interaction.edit_original_response(
@@ -271,20 +315,30 @@ class SheetHubView(discord.ui.View):
 
     async def open_spells(self, interaction: discord.Interaction):
         """Renders the paginated spell list on the hub message."""
+        with locale_context(self.locale or get_locale()):
+            return await self._open_spells(interaction)
+
+    async def _open_spells(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         spells_data = get_character_spells_data(self.db_connection, self.character_id)
 
         if not spells_data:
             await interaction.followup.send(
-                f"Erro de consistência: Personagem com ID `{self.character_id}` não foi localizado.",
+                tr(
+                    "Consistency error: character with ID `{character_id}` was not found.",
+                    character_id=self.character_id,
+                ),
                 ephemeral=True,
             )
             return
 
         if not spells_data["spells"]:
             await interaction.followup.send(
-                f"O personagem {spells_data['character_name']} não possui nenhuma magia cadastrada.",
+                tr(
+                    "Character {character} has no registered spells.",
+                    character=spells_data["character_name"],
+                ),
                 ephemeral=True,
             )
             return
@@ -294,6 +348,7 @@ class SheetHubView(discord.ui.View):
             spells=spells_data["spells"],
             author_id=self.author_id,
             back_callback=self.restore_hub,
+            locale=self.locale,
         )
 
         await interaction.edit_original_response(
@@ -350,9 +405,11 @@ class Sheet(commands.Cog):
     # sheet ---------------------------------------------------
     @app_commands.command(
         name="sheet",
-        description="Envia sua ficha de personagem no chat como uma mensagem efêmera",
+        description="Send your character sheet as an ephemeral message.",
     )
     async def sheet(self, interaction: discord.Interaction):
+        locale = apply_interaction_locale(interaction, self.db_connection)
+
         # Immediate deferral to respect Discord's temporal strictures.
         await interaction.response.defer(ephemeral=True)
 
@@ -363,7 +420,7 @@ class Sheet(commands.Cog):
         except ValueError as e:
             # Capturing database anomalies if the user lacks an active character matrix
             await interaction.followup.send(
-                f"Erro de processamento: {e}", ephemeral=True
+                tr("Processing error: {detail}", detail=e), ephemeral=True
             )
             return
 
@@ -383,6 +440,7 @@ class Sheet(commands.Cog):
             author_id=interaction.user.id,
             sheet_embed=sheet_embed,
             strength=character["st"],
+            locale=locale,
         )
 
         # Mandatory followup via webhook, transmitting the final embed with the hub
@@ -397,14 +455,16 @@ class Sheet(commands.Cog):
 
     @app_commands.command(
         name="sheet_view",
-        description="Permite ao mestre inspecionar a matriz completa de qualquer personagem no sistema.",
+        description="Let the GM inspect any character sheet in the system.",
     )
     @app_commands.autocomplete(character=character_autocomplete)
     @app_commands.describe(
-        character="A entidade que será submetida à inspeção estrutural"
+        character="Character that will be inspected."
     )
     @app_commands.default_permissions(administrator=True)
     async def sheet_view(self, interaction: discord.Interaction, character: str):
+        locale = apply_interaction_locale(interaction, self.db_connection)
+
         # Immediate deferral to respect Discord's temporal strictures.
         await interaction.response.defer(ephemeral=True)
 
@@ -413,7 +473,9 @@ class Sheet(commands.Cog):
             target_character_id = int(character)
         except ValueError:
             await interaction.followup.send(
-                "Erro de processamento: O identificador do personagem fornecido é estruturalmente inválido."
+                tr(
+                    "Processing error: the supplied character identifier is structurally invalid."
+                )
             )
             return
 
@@ -423,7 +485,9 @@ class Sheet(commands.Cog):
                 self.db_connection, target_character_id
             )
         except ValueError as e:
-            await interaction.followup.send(f"Erro de processamento: {e}")
+            await interaction.followup.send(
+                tr("Processing error: {detail}", detail=e)
+            )
             return
 
         sheet_view_embed = build_sheet_embed(character_data)
@@ -442,6 +506,7 @@ class Sheet(commands.Cog):
             author_id=interaction.user.id,
             sheet_embed=sheet_view_embed,
             strength=character_data["st"],
+            locale=locale,
         )
 
         # Strict conditional dispatch protecting network payload against NoneType serialization
