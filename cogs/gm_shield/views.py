@@ -10,11 +10,11 @@ from utils.ansi import code_block, resource_bar
 from utils.db_functions import (
     get_all_combat_effects,
     get_character_combat_effects,
-    get_character_profile_by_id,
+    get_character_combat_profile,
     link_character_effect,
     unlink_character_effect,
 )
-from utils.i18n import get_locale, locale_context, t as tr
+from utils.i18n import catalog_label, get_locale, locale_context, t as tr
 from utils.gm_directives import gm_shield_store
 
 KIND_LABELS = {
@@ -104,13 +104,17 @@ class GMShieldView(discord.ui.View):
                 )
 
             try:
-                profile = get_character_profile_by_id(
+                profile, _effects = get_character_combat_profile(
                     self.connection, self.character_id
                 )
             except ValueError:
                 profile = self.character
-            max_pv = int(profile["st"]) + int(
-                profile.get("additional_max_pv") or 0
+            max_pv = int(
+                profile.get("max_pv")
+                or (
+                    int(profile["st"])
+                    + int(profile.get("additional_max_pv") or 0)
+                )
             )
             current_pv = int(profile.get("current_pv") or 0)
             embed = discord.Embed(
@@ -752,7 +756,9 @@ class EffectSelect(discord.ui.Select):
             discord.SelectOption(
                 label=str(effect["name"])[:100],
                 value=str(effect["effect_id"]),
-                description=str(effect.get("applies_to") or "")[:100],
+                description=catalog_label(
+                    "effect_types", str(effect.get("applies_to") or "")
+                )[:100],
             )
             for effect in effects[:25]
         ]
@@ -835,7 +841,7 @@ class GMShieldEffectsView(GMShieldSubView):
                     self.connection, self.character_id
                 )
                 active_lines = [
-                    f"* {effect['name']} ({effect.get('applies_to') or ''})"
+                    f"* {effect['name']} ({catalog_label('effect_types', str(effect.get('applies_to') or ''))})"
                     for effect in active[:25]
                 ]
                 embed.add_field(

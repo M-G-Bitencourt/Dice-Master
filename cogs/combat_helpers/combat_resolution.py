@@ -10,7 +10,6 @@ import discord
 from cogs.combat_helpers.combat_embeds import _build_defense_embed, _build_interim_defense_embed
 from cogs.combat_helpers.combat_health import resolve_damage_health
 from cogs.combat_helpers.combat_rules import (
-    _available_effects,
     _consume_effects,
     _defense_options,
 )
@@ -38,7 +37,6 @@ from utils.db_functions import (
     expire_pending_attack,
     finish_pending_attack,
     get_character_combat_data,
-    get_character_combat_effects,
     get_combat_participant,
     get_pending_attack,
     record_participant_use,
@@ -123,7 +121,6 @@ async def resolve_defense(
     can_try_again = False
     remaining_options: list[dict] = []
     rd = 0
-    rd_effects: list[dict] = []
 
     try:
         target_character_id = int(claimed["target_character_id"])
@@ -132,9 +129,7 @@ async def resolve_defense(
             raise ValueError("Target character not found.")
 
         profile = target_data["profile"]
-        target_effects = get_character_combat_effects(
-            connection, target_character_id
-        )
+        target_effects = target_data["effects"]
         session_id = claimed.get("session_id")
         target_participant = ensure_combat_participant(
             connection,
@@ -188,13 +183,6 @@ async def resolve_defense(
             if rd_override is not None
             else int(claimed["rd"] or 0)
         )
-        if rd_override is None:
-            rd_effects = _available_effects(
-                target_effects,
-                target_participant,
-                "rd",
-            )
-            rd += sum(int(effect["value"]) for effect in rd_effects)
         effective_rd = rd + (2 if int(claimed["hit_location"]) == 2 else 0)
 
         if waive:
@@ -295,12 +283,6 @@ async def resolve_defense(
                     if outcome["critical_failure"]
                     else int(claimed["raw_damage"])
                 )
-                if rd_effects:
-                    _consume_effects(
-                        connection,
-                        target_participant,
-                        rd_effects,
-                    )
                 penetrating_damage = max(0, chosen_damage - effective_rd)
                 injury_data = compute_injury(
                     penetrating_damage,
@@ -308,7 +290,12 @@ async def resolve_defense(
                     int(claimed["hit_location"]),
                     int(profile["normal_diffuse_homogeneous_unded"] or 0),
                     int(profile["st"]),
-                    int(profile["additional_max_pv"] or 0),
+                    int(
+                        profile.get(
+                            "additional_max_pv_effective",
+                            profile.get("additional_max_pv") or 0,
+                        )
+                    ),
                     old_pv,
                 )
                 old_pv, new_pv = apply_character_injury(
@@ -328,8 +315,12 @@ async def resolve_defense(
                     ),
                     flags=gm_shield_store.get_flags(target_character_id),
                 )
-                max_pv = int(profile["st"]) + int(
-                    profile["additional_max_pv"] or 0
+                max_pv = int(
+                    profile.get("max_pv")
+                    or (
+                        int(profile["st"])
+                        + int(profile["additional_max_pv"] or 0)
+                    )
                 )
                 shock_added = compute_shock_penalty(
                     injury_data["final_injury"], max_pv

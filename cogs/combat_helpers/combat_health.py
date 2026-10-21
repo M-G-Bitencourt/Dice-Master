@@ -16,7 +16,23 @@ from utils.gm_dice import select_health_dice
 
 def _max_pv(profile: dict) -> int:
     """Return the effective maximum PV used by injury thresholds."""
+    if "max_pv" in profile:
+        return max(1, int(profile["max_pv"]))
     return max(1, int(profile["st"]) + int(profile["additional_max_pv"] or 0))
+
+
+def _additional_basic_speed(profile: dict) -> int:
+    """Return the Basic Speed bonus applied to Dodge and Move."""
+    if "additional_basic_speed_effective" in profile:
+        return int(profile["additional_basic_speed_effective"])
+    return int(profile.get("additional_basic_speed") or 0)
+
+
+def _additional_basic_move(profile: dict) -> int:
+    """Return the Basic Move bonus applied to Move."""
+    if "additional_basic_move_effective" in profile:
+        return int(profile["additional_basic_move_effective"])
+    return int(profile.get("additional_basic_move") or 0)
 
 
 def _death_multiplier(pv: int, max_pv: int) -> int:
@@ -65,18 +81,19 @@ def resolve_damage_health(
     new_pv = int(new_pv)
     max_pv = _max_pv(profile)
     ht = int(profile["ht"])
+    check_ht = ht + int(profile.get("ht_check_bonus") or 0)
     wounded = is_wounded(new_pv, max_pv)
     move = compute_basic_move(
         int(profile["dx"]),
         ht,
-        int(profile["additional_basic_speed"] or 0),
-        int(profile["additional_basic_move"] or 0),
+        _additional_basic_speed(profile),
+        _additional_basic_move(profile),
         wounded,
     )
     dodge = compute_dodge(
         int(profile["dx"]),
         ht,
-        int(profile["additional_basic_speed"] or 0),
+        _additional_basic_speed(profile),
         int(encumbrance_penalty),
     )
     dodge = halve_for_wounds(dodge, wounded)
@@ -90,7 +107,7 @@ def resolve_damage_health(
         forced = "success" if active_flags.get("no_faint") else None
         if forced is None and directive_resolver is not None:
             forced = directive_resolver("consciousness")
-        check = _roll_ht_check("0 PV", ht, forced_outcome=forced)
+        check = _roll_ht_check("0 PV", check_ht, forced_outcome=forced)
         check["label_key"] = "zero_hp"
         check["effect"] = "consciente" if check["success"] else "inconsciente"
         check["effect_key"] = "conscious" if check["success"] else "unconscious"
@@ -115,7 +132,7 @@ def resolve_damage_health(
             if active_flags.get("no_death") and forced == "dead":
                 forced = "dying"
             check = _roll_ht_check(
-                f"Morte -{multiplier}xPV", ht, forced_outcome=forced
+                f"Morte -{multiplier}xPV", check_ht, forced_outcome=forced
             )
             if (
                 active_flags.get("no_death")
@@ -123,7 +140,7 @@ def resolve_damage_health(
                 and -check["margin"] >= 3
             ):
                 check = _roll_ht_check(
-                    f"Morte -{multiplier}xPV", ht, forced_outcome="dying"
+                    f"Morte -{multiplier}xPV", check_ht, forced_outcome="dying"
                 )
             check["label_key"] = "death_check"
             check["label_params"] = {"multiplier": multiplier}

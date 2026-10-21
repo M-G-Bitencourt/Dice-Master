@@ -42,6 +42,31 @@ class TestWoundThreshold:
         assert compute_basic_move(12, 10, 1, 2, wounded=True) == 4
 
 
+class TestHTEffectBonuses:
+    def test_ht_check_bonus_applies_to_consciousness_and_death(self, monkeypatch):
+        patch_rolls(monkeypatch, [3, 3, 3, 1, 1, 1])
+
+        result = resolve_damage_health(
+            profile(ht_check_bonus=2), 10, -11
+        )
+
+        assert [check["target"] for check in result["checks"]] == [12, 12]
+
+    def test_effective_max_pv_and_basic_speed_are_used(self):
+        result = resolve_damage_health(
+            profile(
+                max_pv=13,
+                additional_basic_speed_effective=1,
+            ),
+            10,
+            3,
+        )
+
+        assert result["max_pv"] == 13
+        assert result["move"] == 3
+        assert result["dodge"] == 4
+
+
 class TestConsciousnessCheck:
     def test_crossing_zero_with_success_stays_conscious(self, monkeypatch):
         patch_rolls(monkeypatch, [3, 3, 3])

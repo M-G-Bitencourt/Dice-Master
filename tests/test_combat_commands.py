@@ -572,6 +572,58 @@ class TestWeaponAutocomplete:
 
 
 class TestCombatEffects:
+    async def test_dx_and_basic_speed_effects_change_attack_and_dodge(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        dx_effect = insert_combat_effect(
+            db, "DX extra", "dx", value=2
+        )
+        link_combat_effect(db, attacker_id, dx_effect)
+        speed_effect = insert_combat_effect(
+            db, "Velocidade extra", "basic_speed", value=1
+        )
+        link_combat_effect(db, target_id, speed_effect)
+        db.commit()
+        patch_rng(monkeypatch, combat_attack_module, [3, 3, 3], budget=10)
+        patch_rng(monkeypatch, combat_resolution_module, [3, 3, 3], budget=10)
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await attack(cog, interaction, attacker_id, target_id, mode_id)
+
+        pending = get_pending_attack_for_channel(db, 100)
+        assert pending["nh_effective"] == 16
+        view = interaction.edited[0]["kwargs"]["view"]
+        assert view.children[0].option["value"] == 9
+
+    async def test_passive_rd_effect_is_not_consumed(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        effect_id = insert_combat_effect(
+            db,
+            "Pele de Pedra",
+            "rd",
+            value=2,
+            uses_per_turn=1,
+        )
+        link_combat_effect(db, target_id, effect_id)
+        db.commit()
+        patch_rng(monkeypatch, combat_attack_module, [3, 3, 3], budget=10)
+        patch_rng(monkeypatch, combat_resolution_module, [3, 3, 3], budget=10)
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await attack(cog, interaction, attacker_id, target_id, mode_id)
+
+        pending = get_pending_attack_for_channel(db, 100)
+        assert pending["rd"] == 4
+        participant = get_combat_participant(
+            db, pending["session_id"], target_id
+        )
+        assert participant["effect_uses"] == {}
+
     async def test_attack_and_damage_effects_are_applied_and_consumed(
         self, make_cog, interaction, db, monkeypatch
     ):

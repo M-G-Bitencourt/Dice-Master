@@ -3,7 +3,11 @@ import json
 import sqlite3
 from pathlib import Path
 
-from utils.combat import compute_encumbrance_penalty
+from utils.combat import (
+    apply_continuous_effects,
+    compute_encumbrance_penalty,
+    continuous_effect_total,
+)
 
 # SQL FUNCTIONS (next_turn_conditions)
 VALID_COLUMNS = {
@@ -698,7 +702,10 @@ def _get_character_additional_stats_dict(
 
 
 def get_character_skills_data(
-    connection: sqlite3.Connection, character_id: int
+    connection: sqlite3.Connection,
+    character_id: int,
+    *,
+    attribute_bonuses: dict | None = None,
 ) -> dict | None:
     """
     Retrieves the complete list of registered skills for a character,
@@ -722,8 +729,13 @@ def get_character_skills_data(
         return None
 
     char_name, st, dx, iq, ht, add_per, add_vont = char_row
-    per = iq + (add_per or 0)
-    vont = iq + (add_vont or 0)
+    bonuses = attribute_bonuses or {}
+    st = int(st or 0) + int(bonuses.get("st") or 0)
+    dx = int(dx or 0) + int(bonuses.get("dx") or 0)
+    iq = int(iq or 0) + int(bonuses.get("iq") or 0)
+    ht = int(ht or 0) + int(bonuses.get("ht") or 0)
+    per = iq + int(add_per or 0) + int(bonuses.get("per") or 0)
+    vont = iq + int(add_vont or 0) + int(bonuses.get("will") or 0)
 
     # 2. Fetch additional stats dictionary
     additional_stats = _get_character_additional_stats_dict(connection, character_id)
@@ -1378,12 +1390,31 @@ def get_character_carried_weight(
     return float(row[0] if row and row[0] is not None else 0.0)
 
 
+def get_character_combat_profile(
+    connection: sqlite3.Connection, character_id: int
+) -> tuple[dict, list[dict]]:
+    """Return the combat profile with passive effects and the effect list."""
+    profile = get_character_profile_by_id(connection, character_id)
+    effects = get_character_combat_effects(connection, character_id)
+    return apply_continuous_effects(profile, effects), effects
+
+
 def get_character_combat_data(
     connection: sqlite3.Connection, character_id: int
 ) -> dict | None:
     """Assemble the profile, skills, conditions, weapons, armour and weight."""
-    profile = get_character_profile_by_id(connection, character_id)
-    skills_data = get_character_skills_data(connection, character_id)
+    profile, effects = get_character_combat_profile(
+        connection, character_id
+    )
+    attribute_bonuses = {
+        key: continuous_effect_total(effects, key)
+        for key in ("st", "dx", "iq", "ht", "per", "will")
+    }
+    skills_data = get_character_skills_data(
+        connection,
+        character_id,
+        attribute_bonuses=attribute_bonuses,
+    )
     if not skills_data:
         return None
 
@@ -1399,6 +1430,7 @@ def get_character_combat_data(
 
     return {
         "profile": profile,
+        "effects": effects,
         "skills": skills,
         "skill_by_id": skill_by_id,
         "conditions": get_character_conditions_by_id(connection, character_id),

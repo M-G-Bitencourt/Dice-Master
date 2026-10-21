@@ -514,18 +514,102 @@ def compute_injury(
     }
 
 
-EFFECT_TYPE_LABELS: dict[str, str] = {
-    "attack": "Ataque",
-    "damage": "Dano",
-    "defense": "Defesa",
-    "dodge": "Esquiva",
-    "parry": "Aparar",
-    "rd": "RD",
-    "extra_defense_attempts": "Tentativas extras de defesa",
-    "extra_defense_uses": "Usos extras de defesa",
-}
-
 DEFENSE_EFFECT_TARGETS = ("dodge", "parry", "block")
+
+CONTINUOUS_EFFECT_TYPES = frozenset(
+    {
+        "st",
+        "dx",
+        "iq",
+        "ht",
+        "max_pv",
+        "max_pf",
+        "will",
+        "per",
+        "basic_speed",
+        "basic_move",
+        "ht_check",
+        "rd",
+    }
+)
+
+
+def continuous_effect_total(
+    effects: Iterable[dict], applies_to: str
+) -> int:
+    """Sum passive effects of one family that have no target filter."""
+    if applies_to not in CONTINUOUS_EFFECT_TYPES:
+        return 0
+    return sum(
+        int(effect.get("value") or 0)
+        for effect in effects
+        if effect.get("applies_to") == applies_to
+        and effect.get("target") is None
+    )
+
+
+def apply_continuous_effects(
+    profile: dict, effects: Iterable[dict]
+) -> dict:
+    """Return a combat profile adjusted by linked passive effects."""
+    effect_list = list(effects)
+    st = int(profile["st"]) + continuous_effect_total(effect_list, "st")
+    dx = int(profile["dx"]) + continuous_effect_total(effect_list, "dx")
+    iq = int(profile["iq"]) + continuous_effect_total(effect_list, "iq")
+    ht = int(profile["ht"]) + continuous_effect_total(effect_list, "ht")
+
+    additional_max_pv = int(
+        profile.get("additional_max_pv") or 0
+    ) + continuous_effect_total(effect_list, "max_pv")
+    additional_max_pf = int(
+        profile.get("additional_max_pf") or 0
+    ) + continuous_effect_total(effect_list, "max_pf")
+    additional_basic_speed = int(
+        profile.get("additional_basic_speed") or 0
+    ) + continuous_effect_total(effect_list, "basic_speed")
+    additional_basic_move = int(
+        profile.get("additional_basic_move") or 0
+    ) + continuous_effect_total(effect_list, "basic_move")
+
+    effective = dict(profile)
+    effective.update(
+        {
+            "st": st,
+            "dx": dx,
+            "iq": iq,
+            "ht": ht,
+            "additional_max_pv_effective": additional_max_pv,
+            "additional_max_pf_effective": additional_max_pf,
+            "max_pv": max(1, st + additional_max_pv),
+            "max_pf": max(1, ht + additional_max_pf),
+            "will": (
+                iq
+                + int(profile.get("additional_vont") or 0)
+                + continuous_effect_total(effect_list, "will")
+            ),
+            "per": (
+                iq
+                + int(profile.get("additional_per") or 0)
+                + continuous_effect_total(effect_list, "per")
+            ),
+            "additional_basic_speed_effective": additional_basic_speed,
+            "additional_basic_move_effective": additional_basic_move,
+            "basic_speed": (
+                (dx + ht) / 4.0 + additional_basic_speed
+            ),
+            "basic_move": max(
+                0,
+                (dx + ht) // 4
+                + additional_basic_speed
+                + additional_basic_move,
+            ),
+            "ht_check_bonus": continuous_effect_total(
+                effect_list, "ht_check"
+            ),
+            "rd_bonus": continuous_effect_total(effect_list, "rd"),
+        }
+    )
+    return effective
 
 
 def effect_is_available(effect: dict, participant: dict | None) -> bool:

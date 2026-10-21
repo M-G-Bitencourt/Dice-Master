@@ -44,26 +44,6 @@ def _consume_effects(
     return applied
 
 
-def _available_effects(
-    effects: list[dict],
-    participant: dict | None,
-    applies_to: str,
-    *,
-    target: str | None = None,
-) -> list[dict]:
-    """Filter active effects by family and per-turn availability."""
-    result = []
-    for effect in effects:
-        if effect.get("applies_to") != applies_to:
-            continue
-        if target is not None and effect.get("target") not in (None, target):
-            continue
-        if not effect_is_available(effect, participant):
-            continue
-        result.append(effect)
-    return result
-
-
 def _select_available_effects(
     effects: list[dict],
     participant: dict | None,
@@ -114,16 +94,26 @@ def _defense_options(
         and effect.get("target") in (None, "dodge")
         and effect_is_available(effect, participant)
     ]
-    max_pv = int(profile.get("st") or 0) + int(
-        profile.get("additional_max_pv") or 0
+    max_pv = int(
+        profile.get("max_pv")
+        or (
+            int(profile.get("st") or 0)
+            + int(profile.get("additional_max_pv") or 0)
+        )
     )
     wounded = is_wounded(int(profile.get("current_pv") or 0), max_pv)
+    additional_basic_speed = int(
+        profile.get(
+            "additional_basic_speed_effective",
+            profile.get("additional_basic_speed") or 0,
+        )
+    )
     dodge = max(
         0,
         compute_dodge(
             int(profile["dx"]),
             int(profile["ht"]),
-            int(profile["additional_basic_speed"] or 0),
+            additional_basic_speed,
             int(target_data["encumbrance_penalty"]),
         )
         + generic_defense_bonus

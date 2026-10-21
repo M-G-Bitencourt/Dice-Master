@@ -6,6 +6,7 @@ import pytest
 
 from utils.combat import (
     active_effect_bonus,
+    apply_continuous_effects,
     build_modifier_breakdown,
     classify_roll,
     compute_armor_dr,
@@ -349,6 +350,60 @@ def effect(effect_id=1, applies_to="attack", value=2, uses=0, target=None):
         "uses_per_turn": uses,
         "target": target,
     }
+
+
+class TestContinuousEffects:
+    def test_passive_effects_adjust_primary_and_secondary_stats(self):
+        profile = {
+            "st": 10,
+            "dx": 10,
+            "iq": 10,
+            "ht": 10,
+            "additional_max_pv": 0,
+            "additional_vont": 0,
+            "additional_per": 0,
+            "additional_max_pf": 0,
+            "additional_basic_speed": 0,
+            "additional_basic_move": 0,
+        }
+        effects = [
+            effect(1, "st", 2),
+            effect(2, "dx", 1),
+            effect(3, "iq", 2),
+            effect(4, "ht", 1),
+            effect(5, "max_pv", 3),
+            effect(6, "max_pf", 1),
+            effect(7, "will", 1),
+            effect(8, "per", 2),
+            effect(9, "basic_speed", 1),
+            effect(10, "basic_move", 2),
+            effect(11, "ht_check", 2),
+            effect(12, "rd", 3),
+        ]
+
+        effective = apply_continuous_effects(profile, effects)
+
+        assert effective["st"] == 12
+        assert effective["dx"] == 11
+        assert effective["iq"] == 12
+        assert effective["ht"] == 11
+        assert effective["max_pv"] == 15
+        assert effective["max_pf"] == 12
+        assert effective["will"] == 13
+        assert effective["per"] == 14
+        assert effective["basic_speed"] == 6.5
+        assert effective["basic_move"] == 8
+        assert effective["ht_check_bonus"] == 2
+        assert effective["rd_bonus"] == 3
+
+    def test_passive_effects_with_target_are_ignored(self):
+        profile = {"st": 10, "dx": 10, "iq": 10, "ht": 10}
+
+        effective = apply_continuous_effects(
+            profile, [effect(1, "st", 2, target="dodge")]
+        )
+
+        assert effective["st"] == 10
 
 
 class TestCombatEffects:

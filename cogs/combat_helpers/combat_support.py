@@ -76,7 +76,9 @@ def _can_defend(
 
 
 def _max_pv(profile: dict) -> int:
-    """Return the effective maximum PV from the denormalized character row."""
+    """Return the effective maximum PV from the combat profile."""
+    if "max_pv" in profile:
+        return int(profile["max_pv"])
     return int(profile["st"]) + int(profile["additional_max_pv"] or 0)
 
 

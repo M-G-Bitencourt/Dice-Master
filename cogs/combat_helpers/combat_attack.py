@@ -14,7 +14,6 @@ from cogs.combat_helpers.combat_embeds import _build_attack_embed
 from cogs.combat_helpers.combat_health import resolve_damage_health
 from cogs.combat_helpers.combat_resolution import resolve_defense
 from cogs.combat_helpers.combat_rules import (
-    _available_effects,
     _consume_effects,
     _defense_options,
     _select_available_effects,
@@ -51,7 +50,6 @@ from utils.db_functions import (
     create_pending_attack,
     get_active_combat_session,
     get_character_combat_data,
-    get_character_combat_effects,
     get_combat_participant,
     reset_combat_participant_turn,
     set_character_combat_stance,
@@ -312,20 +310,18 @@ async def perform_attack(
     if mode_attack_modifier:
         modifiers.append((tr("Mode"), mode_attack_modifier))
     breakdown = build_modifier_breakdown(base_nh, modifiers)
-    actor_effects = get_character_combat_effects(
-        cog.db_connection, actor_character_id
-    )
-    target_effects = get_character_combat_effects(
-        cog.db_connection, target_character_id
-    )
+    actor_effects = actor_data["effects"]
+    target_effects = target_data["effects"]
 
     rd_result = compute_armor_dr(
         target_data["armor_layers"], hit_location_id
     )
-    rd = int(rd_result["total"])
 
     actor_profile = actor_data["profile"]
     target_profile = target_data["profile"]
+    rd = int(rd_result["total"]) + int(
+        target_profile.get("rd_bonus") or 0
+    )
     target_is_npc = bool(target_profile.get("is_npc"))
     target_owner_id = (
         None if target_is_npc else target_profile.get("owner_id")
@@ -500,25 +496,11 @@ async def perform_attack(
                     if outcome["critical_success"]
                     else int(damage_data["damage"])
                 )
-                target_rd_effects = _available_effects(
-                    target_effects,
-                    target_participant,
-                    "rd",
-                )
-                auto_rd = rd + sum(
-                    int(effect["value"])
-                    for effect in target_rd_effects
-                )
                 penetrating = max(
                     0,
                     chosen_damage
-                    - auto_rd
+                    - rd
                     - (2 if hit_location_id == 2 else 0),
-                )
-                _consume_effects(
-                    cog.db_connection,
-                    target_participant,
-                    target_rd_effects,
                 )
                 critical_injury = compute_injury(
                     penetrating,
@@ -531,7 +513,12 @@ async def perform_attack(
                         or 0
                     ),
                     int(target_profile["st"]),
-                    int(target_profile["additional_max_pv"] or 0),
+                    int(
+                        target_profile.get(
+                            "additional_max_pv_effective",
+                            target_profile.get("additional_max_pv") or 0,
+                        )
+                    ),
                     int(target_profile["current_pv"] or 0),
                 )
                 critical_old_pv, critical_new_pv = apply_character_injury(
@@ -551,8 +538,12 @@ async def perform_attack(
                     ),
                     flags=gm_shield_store.get_flags(target_character_id),
                 )
-                max_pv = int(target_profile["st"]) + int(
-                    target_profile["additional_max_pv"] or 0
+                max_pv = int(
+                    target_profile.get("max_pv")
+                    or (
+                        int(target_profile["st"])
+                        + int(target_profile["additional_max_pv"] or 0)
+                    )
                 )
                 shock_added = compute_shock_penalty(
                     critical_injury["final_injury"], max_pv

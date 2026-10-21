@@ -154,6 +154,53 @@ class TestCombatData:
         assert data["armor_layers"] == []
         assert data["encumbrance_penalty"] == 0
 
+    def test_passive_effects_apply_to_profile_and_skills(self, db):
+        character_id = insert_character(db, owner_id=1, name="Efeitos")
+        skill_ids = {
+            "Espadas": insert_skill(db, name="Espadas", attribute="DX"),
+            "História": insert_skill(db, name="História", attribute="IQ"),
+            "Percepção": insert_skill(db, name="Percepção", attribute="Per"),
+            "Vontade": insert_skill(db, name="Vontade", attribute="Will"),
+        }
+        for skill_id in skill_ids.values():
+            db.execute(
+                "INSERT INTO character_skills "
+                "(character_id, skill_id, relative_level) VALUES (?, ?, 0)",
+                (character_id, skill_id),
+            )
+        effects = [
+            ("ST", "st", 2),
+            ("DX", "dx", 1),
+            ("IQ", "iq", 2),
+            ("PV", "max_pv", 3),
+            ("Per", "per", 1),
+            ("Vontade", "will", 1),
+            ("HT checks", "ht_check", 2),
+            ("RD", "rd", 3),
+        ]
+        for name, applies_to, value in effects:
+            effect_id = insert_combat_effect(
+                db, name, applies_to, value=value
+            )
+            link_character_effect(db, character_id, effect_id)
+        db.commit()
+
+        data = get_character_combat_data(db, character_id)
+
+        assert data is not None
+        assert data["profile"]["st"] == 12
+        assert data["profile"]["max_pv"] == 15
+        assert data["profile"]["ht_check_bonus"] == 2
+        assert data["profile"]["rd_bonus"] == 3
+        assert len(data["effects"]) == len(effects)
+        nh = {
+            skill["name"]: skill["nh"] for skill in data["skills"]
+        }
+        assert nh["Espadas"] == 11
+        assert nh["História"] == 12
+        assert nh["Percepção"] == 13
+        assert nh["Vontade"] == 13
+
     def test_target_armor_layers_are_returned(self, db):
         target_id = make_target(db)
 

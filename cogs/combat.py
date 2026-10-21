@@ -34,6 +34,7 @@ from utils.db_functions import (
     get_active_combat_session,
     get_active_combat_sessions,
     get_character_combat_data,
+    get_character_combat_profile,
     get_character_profile_by_id,
     get_combat_participants,
     get_equipped_melee_modes,
@@ -463,6 +464,8 @@ class Combat(commands.Cog):
     @staticmethod
     def _basic_speed(profile: dict) -> float:
         """Return the GURPS Basic Speed used as default initiative."""
+        if "basic_speed" in profile:
+            return round(float(profile["basic_speed"]), 2)
         return round(
             (float(profile["dx"]) + float(profile["ht"])) / 4.0
             + float(profile.get("additional_basic_speed") or 0),
@@ -598,7 +601,7 @@ class Combat(commands.Cog):
             character_id = self._resolve_managed_character(
                 interaction, personagem
             )
-            profile = get_character_profile_by_id(
+            profile, _effects = get_character_combat_profile(
                 self.db_connection, character_id
             )
         except (ValueError, TypeError) as error:
