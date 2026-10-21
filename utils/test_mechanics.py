@@ -55,6 +55,18 @@ def quick_dispute(
         dices1 = [randint(1, 6) for _ in range(3)]
         dices2 = [randint(1, 6) for _ in range(3)]
 
+    return build_quick_dispute_result(
+        dices1, dices2, effective_nh1, effective_nh2
+    )
+
+
+def build_quick_dispute_result(
+    dices1: list[int],
+    dices2: list[int],
+    effective_nh1: int,
+    effective_nh2: int,
+) -> dict:
+    """Build the canonical quick-contest payload from two dice sets."""
     dice_pool1 = sum(dices1)
     success_roll1 = False if dice_pool1 > effective_nh1 else True
     margin1 = effective_nh1 - dice_pool1
@@ -63,7 +75,7 @@ def quick_dispute(
     success_roll2 = False if dice_pool2 > effective_nh2 else True
     margin2 = effective_nh2 - dice_pool2
 
-    total_result = {
+    return {
         "result1": {
             "dice_pool1": dice_pool1,
             "success_roll1": success_roll1,
@@ -77,5 +89,3 @@ def quick_dispute(
             "dices2": dices2,
         },
     }
-
-    return total_result

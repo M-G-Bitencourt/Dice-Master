@@ -2000,3 +2000,81 @@ class TestCombatFeint:
             db, int(get_active_combat_session(db, 100)["session_id"])
         )
         assert [p["character_id"] for p in participants] == [attacker_id]
+
+
+class TestGMShieldCombatDirectives:
+    async def test_attack_directive_forces_success_and_minimum_damage(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        from utils.gm_directives import gm_shield_store
+
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        gm_shield_store.set(
+            character_id=attacker_id,
+            player_id=1,
+            roll_kind="attack",
+            outcome="success",
+            payload={"damage_preset": "min"},
+        )
+        join_combat(db, [attacker_id, target_id], attacker_id)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id
+        )
+
+        pending = get_pending_attack_for_channel(db, 100)
+        assert pending is not None
+        assert pending["attack_margin"] == 0
+        assert pending["raw_damage"] == 5
+        descriptions = " ".join(
+            entry["description"] or ""
+            for entry in get_recent_combat_log(
+                db, int(get_active_combat_session(db, 100)["session_id"])
+            )
+        )
+        assert "GM" not in descriptions
+        assert "forced" not in descriptions.lower()
+        assert db.execute("SELECT COUNT(*) FROM hdm").fetchone() == (0,)
+
+    async def test_defense_directive_forces_a_failed_defense(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        from utils.gm_directives import gm_shield_store
+
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        gm_shield_store.set(
+            character_id=attacker_id,
+            player_id=1,
+            roll_kind="attack",
+            outcome="success",
+            payload={"damage_preset": "min"},
+        )
+        gm_shield_store.set(
+            character_id=target_id,
+            player_id=2,
+            roll_kind="defense",
+            outcome="failure",
+        )
+        join_combat(db, [attacker_id, target_id], attacker_id)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id
+        )
+        view = interaction.edited[0]["kwargs"]["view"]
+        target_interaction = FakeInteraction(user_id=2)
+        await view.handle_defense(
+            target_interaction, view.children[0].option
+        )
+
+        hp = db.execute(
+            "SELECT current_pv FROM characters WHERE character_id = ?",
+            (target_id,),
+        ).fetchone()[0]
+        assert hp < 10
+        assert gm_shield_store.consume(
+            character_id=target_id,
+            player_id=2,
+            roll_kind="defense",
+        ) is None

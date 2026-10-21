@@ -8,9 +8,11 @@ import sqlite3
 
 from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
-from utils.test_mechanics import quick_dispute
-from utils.db_functions import get_character_thumbnail_payload
+from utils.test_mechanics import build_quick_dispute_result, quick_dispute
+from utils.db_functions import get_character_profile, get_character_thumbnail_payload
 from utils.i18n import t as tr
+from utils.gm_dice import select_dice_for_outcome, select_quick_contest_dice
+from utils.gm_directives import gm_shield_store
 from utils.locale_service import apply_interaction_locale
 
 
@@ -49,10 +51,28 @@ class Skill_tests(commands.Cog):
         if effective_sl < 0:
             effective_sl = 0
 
-        # Processing transient fate state from the persistence layer
-        pending_fate = consume_deterministic_fate(player_id)
+        character_id = None
+        try:
+            character_id = get_character_profile(
+                self.db_connection, player_id
+            )["character_id"]
+        except ValueError:
+            character_id = None
 
-        if pending_fate is not None:
+        directive = gm_shield_store.consume(
+            character_id=character_id,
+            player_id=player_id,
+            roll_kind="skill_test",
+        )
+        pending_fate = (
+            None
+            if directive is not None
+            else consume_deterministic_fate(player_id, self.db_connection)
+        )
+
+        if directive is not None:
+            dices = select_dice_for_outcome(effective_sl, directive.outcome)
+        elif pending_fate is not None:
             dices = hdm_dices(nh=effective_sl, fate=pending_fate)
         else:
             dices = [randint(1, 6) for _ in range(3)]
@@ -168,8 +188,29 @@ class Skill_tests(commands.Cog):
         effective_sl1 = nh1
         effective_sl2 = nh2
 
-        # Invoking the core relational dispute logic mapping
-        result = quick_dispute(player_id, effective_sl1, effective_sl2)
+        character_id = None
+        try:
+            character_id = get_character_profile(
+                self.db_connection, player_id
+            )["character_id"]
+        except ValueError:
+            character_id = None
+
+        directive = gm_shield_store.consume(
+            character_id=character_id,
+            player_id=player_id,
+            roll_kind="quick_contest",
+        )
+        if directive is not None:
+            dices1, dices2 = select_quick_contest_dice(
+                effective_sl1, effective_sl2, directive.outcome
+            )
+            result = build_quick_dispute_result(
+                dices1, dices2, effective_sl1, effective_sl2
+            )
+        else:
+            # Invoking the core relational dispute logic mapping
+            result = quick_dispute(player_id, effective_sl1, effective_sl2)
 
         dice_pool1 = result["result1"]["dice_pool1"]
         success_roll1 = result["result1"]["success_roll1"]

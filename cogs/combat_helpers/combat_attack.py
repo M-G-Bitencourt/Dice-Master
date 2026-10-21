@@ -26,6 +26,11 @@ from cogs.combat_helpers.combat_support import (
 )
 from cogs.combat_helpers.combat_views import DefenseView
 from utils.i18n import catalog_label, catalog_label_from_value, get_locale, t as tr
+from utils.gm_dice import apply_damage_preset, select_dice_for_outcome
+from utils.gm_directives import (
+    consume_health_directive,
+    gm_shield_store,
+)
 from utils.combat import (
     DAMAGE_TYPE_KEYS,
     HIT_LOCATIONS,
@@ -397,12 +402,35 @@ async def perform_attack(
         target_cannot_defend = target_no_defense or not defenses
         max_attempts = max_defense_attempts(target_effects)
 
-        fate = (
-            consume_deterministic_fate(actor_owner_id, cog.db_connection)
-            if actor_owner_id is not None
-            else None
+        attack_directive = gm_shield_store.consume(
+            character_id=actor_character_id,
+            player_id=actor_owner_id,
+            roll_kind="attack",
         )
-        if fate is not None:
+        fate = (
+            None
+            if attack_directive is not None
+            else (
+                consume_deterministic_fate(actor_owner_id, cog.db_connection)
+                if actor_owner_id is not None
+                else None
+            )
+        )
+
+        if (
+            attack_directive is not None
+            and attack_directive.outcome != "random"
+        ):
+            requested = attack_directive.outcome
+            if (
+                requested == "critical_success"
+                and attack_directive.payload.get("damage_preset")
+            ):
+                requested = "success"
+            dices = select_dice_for_outcome(
+                breakdown["effective"], requested
+            )
+        elif fate is not None:
             dices = hdm_dices(nh=breakdown["effective"], fate=fate)
         else:
             dices = [randint(1, 6) for _ in range(3)]
@@ -459,6 +487,13 @@ async def perform_attack(
                 int(damage_data["total_modifier"]) + damage_bonus
             )
 
+            if attack_directive is not None:
+                apply_damage_preset(
+                    damage_data,
+                    attack_directive.payload.get("damage_preset"),
+                    attack_directive.payload.get("damage_exact"),
+                )
+
             if outcome["critical_success"] or target_cannot_defend:
                 chosen_damage = (
                     int(damage_data["critical_damage"])
@@ -509,6 +544,12 @@ async def perform_attack(
                     critical_old_pv,
                     critical_new_pv,
                     int(target_data["encumbrance_penalty"]),
+                    directive_resolver=lambda check_type: consume_health_directive(
+                        target_character_id,
+                        target_owner_id,
+                        check_type,
+                    ),
+                    flags=gm_shield_store.get_flags(target_character_id),
                 )
                 max_pv = int(target_profile["st"]) + int(
                     target_profile["additional_max_pv"] or 0

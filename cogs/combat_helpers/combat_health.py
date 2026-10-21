@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from random import randint
 
 from utils.combat import (
@@ -10,6 +11,7 @@ from utils.combat import (
     halve_for_wounds,
     is_wounded,
 )
+from utils.gm_dice import select_health_dice
 
 
 def _max_pv(profile: dict) -> int:
@@ -24,17 +26,28 @@ def _death_multiplier(pv: int, max_pv: int) -> int:
     return abs(int(pv)) // max(1, int(max_pv))
 
 
-def _roll_ht_check(label: str, ht: int) -> dict:
-    """Roll 3d6 against HT and report the raw check."""
-    dices = [randint(1, 6) for _ in range(3)]
-    total = sum(dices)
-    margin = int(ht) - total
+def _roll_ht_check(
+    label: str,
+    ht: int,
+    forced_outcome: str | None = None,
+) -> dict:
+    """Roll 3d6 against HT and report the check, optionally forced."""
+    if forced_outcome is not None:
+        dices, total, success, margin = select_health_dice(
+            int(ht), forced_outcome
+        )
+    else:
+        dices = [randint(1, 6) for _ in range(3)]
+        total = sum(dices)
+        margin = int(ht) - total
+        success = total <= int(ht)
+
     return {
         "label": label,
         "target": int(ht),
         "dices": dices,
         "total": total,
-        "success": total <= int(ht),
+        "success": success,
         "margin": margin,
     }
 
@@ -44,6 +57,8 @@ def resolve_damage_health(
     old_pv: int,
     new_pv: int,
     encumbrance_penalty: int = 0,
+    directive_resolver: Callable[[str], str | None] | None = None,
+    flags: dict[str, bool] | None = None,
 ) -> dict:
     """Resolve consciousness and death checks for one injury event."""
     old_pv = int(old_pv)
@@ -70,8 +85,12 @@ def resolve_damage_health(
     conscious = True
     life_state = "alive"
 
+    active_flags = flags or {}
     if old_pv > 0 >= new_pv:
-        check = _roll_ht_check("0 PV", ht)
+        forced = "success" if active_flags.get("no_faint") else None
+        if forced is None and directive_resolver is not None:
+            forced = directive_resolver("consciousness")
+        check = _roll_ht_check("0 PV", ht, forced_outcome=forced)
         check["label_key"] = "zero_hp"
         check["effect"] = "consciente" if check["success"] else "inconsciente"
         check["effect_key"] = "conscious" if check["success"] else "unconscious"
@@ -88,7 +107,24 @@ def resolve_damage_health(
         old_multiplier = _death_multiplier(old_pv, max_pv)
         new_multiplier = _death_multiplier(new_pv, max_pv)
         for multiplier in range(old_multiplier + 1, new_multiplier + 1):
-            check = _roll_ht_check(f"Morte -{multiplier}xPV", ht)
+            forced = (
+                directive_resolver("death")
+                if directive_resolver is not None
+                else None
+            )
+            if active_flags.get("no_death") and forced == "dead":
+                forced = "dying"
+            check = _roll_ht_check(
+                f"Morte -{multiplier}xPV", ht, forced_outcome=forced
+            )
+            if (
+                active_flags.get("no_death")
+                and not check["success"]
+                and -check["margin"] >= 3
+            ):
+                check = _roll_ht_check(
+                    f"Morte -{multiplier}xPV", ht, forced_outcome="dying"
+                )
             check["label_key"] = "death_check"
             check["label_params"] = {"multiplier": multiplier}
             checks.append(check)

@@ -11,6 +11,7 @@ from pathlib import Path
 from utils.db_migrations import apply_migrations
 from utils.discord_translator import DiceMasterTranslator
 from utils.i18n import configure_default_locale
+from utils.gm_permissions import apply_gm_permissions
 
 # ===============================================================
 
@@ -74,6 +75,7 @@ class DiceMasterBot(commands.Bot):
             "cogs.traits",
             "cogs.help",
             "cogs.settings",
+            "cogs.gm_shield",
             ]
 
         for extension in extensions:
@@ -85,6 +87,10 @@ class DiceMasterBot(commands.Bot):
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
+        try:
+            await apply_gm_permissions(self)
+        except Exception:
+            pass
 
 
 # Definition of permissions
@@ -142,6 +148,7 @@ def initialize_system_database() -> None:
 async def sync(ctx):
     try:
         syncs = await bot.tree.sync()
+        await apply_gm_permissions(bot, syncs)
         await ctx.reply(f"{len(syncs)} Commands successfully synchronized")
 
     except Exception as e:

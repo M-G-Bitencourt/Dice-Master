@@ -53,6 +53,16 @@ def clear_guild_locale(
     connection.commit()
 
 
+def get_optional_character_id(
+    connection: sqlite3.Connection, player_id: int
+) -> int | None:
+    """Return the active character id for a player, or None when absent."""
+    try:
+        return _resolve_character_id(connection, int(player_id))
+    except (ValueError, TypeError):
+        return None
+
+
 def _resolve_character_id(connection: sqlite3.Connection, player_id: int) -> int:
     """
     Internal helper to map the Discord player_id (owner_id) to the internal character_id.
@@ -1803,6 +1813,33 @@ def get_character_combat_effects(
             "value": int(row[5] or 0),
             "uses_per_turn": int(row[6] or 0),
             "notes": row[7],
+        }
+        for row in rows
+    ]
+
+
+def get_all_combat_effects(
+    connection: sqlite3.Connection, limit: int = 25
+) -> list[dict]:
+    """Return catalog effects ordered by name for the GM shield panel."""
+    rows = connection.execute(
+        """
+        SELECT effect_id, name, applies_to, target, value, uses_per_turn, notes
+        FROM combat_effects
+        ORDER BY name COLLATE NOCASE ASC
+        LIMIT ?
+        """,
+        (int(limit),),
+    ).fetchall()
+    return [
+        {
+            "effect_id": row[0],
+            "name": row[1],
+            "applies_to": row[2],
+            "target": row[3],
+            "value": row[4],
+            "uses_per_turn": row[5],
+            "notes": row[6],
         }
         for row in rows
     ]

@@ -168,7 +168,10 @@ def build_help_messages(
     """Build plain message payloads with the complete command catalog."""
     with locale_context(locale or get_locale()):
         visible_commands = [
-            command for command in commands if command.name not in HIDDEN_COMMANDS
+            command
+            for command in commands
+            if command.name not in HIDDEN_COMMANDS
+            and not isinstance(command, app_commands.ContextMenu)
         ]
 
         pages = _paginate_categories(_group_by_category(visible_commands))

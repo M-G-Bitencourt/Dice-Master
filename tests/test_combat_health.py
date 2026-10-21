@@ -147,3 +147,67 @@ class TestWoundedEmbedValues:
         assert result["wounded"] is True
         assert result["move"] == 2
         assert result["dodge"] == 4
+
+
+class TestGMShieldHealthDirectives:
+    def test_forced_consciousness_failure(self):
+        result = resolve_damage_health(
+            profile(),
+            5,
+            0,
+            directive_resolver=lambda check_type: "failure",
+        )
+
+        assert result["checks"][0]["success"] is False
+        assert result["status"] == "inconsciente"
+
+    def test_no_faint_forces_consciousness_success(self):
+        result = resolve_damage_health(
+            profile(),
+            5,
+            0,
+            flags={"no_faint": True},
+        )
+
+        assert result["checks"][0]["success"] is True
+        assert result["status"] == "consciente"
+
+    def test_forced_death_check_can_kill(self):
+        result = resolve_damage_health(
+            profile(),
+            10,
+            -11,
+            directive_resolver=lambda check_type: (
+                "dead" if check_type == "death" else None
+            ),
+        )
+
+        assert result["checks"][1]["success"] is False
+        assert -result["checks"][1]["margin"] >= 3
+        assert result["status"] == "morto"
+
+    def test_no_death_caps_failed_death_check_at_dying(self):
+        result = resolve_damage_health(
+            profile(),
+            10,
+            -11,
+            directive_resolver=lambda check_type: (
+                "dead" if check_type == "death" else None
+            ),
+            flags={"no_death": True},
+        )
+
+        assert result["checks"][1]["success"] is False
+        assert -result["checks"][1]["margin"] <= 2
+        assert result["status"] == "morrendo"
+
+    def test_no_death_does_not_prevent_automatic_death(self):
+        result = resolve_damage_health(
+            profile(),
+            -40,
+            -50,
+            flags={"no_death": True},
+        )
+
+        assert result["checks"] == []
+        assert result["status"] == "morto"

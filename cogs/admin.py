@@ -8,19 +8,16 @@ from pathlib import Path
 from utils.ansi import code_block, resource_bar
 from utils.i18n import catalog_label, t as tr
 from utils.locale_service import apply_interaction_locale
+from utils.gm_directives import gm_shield_store
 from utils.db_functions import set_character_resource
 from utils.db_functions import get_character_profile
 from utils.db_functions import get_character_thumbnail_by_id
-
-# Dynamic resolution of the absolute path strictly for the database
-BASE_DIRECTORY = Path(__file__).resolve().parent.parent
-DATABASE_FILE_PATH = BASE_DIRECTORY / "data" / "database.db"
 
 
 class Admin(commands.Cog):
     """
     Cog responsible for overriding standard dice rolls with deterministic outcomes.
-    Restricted to administrative usage for debugging and narrative control.
+    Restricted to administrative usage for debugging and GM shield.
     """
 
     def __init__(self, bot: commands.Bot):
@@ -76,32 +73,18 @@ class Admin(commands.Cog):
             return
 
         player_identifier = player.id
-        fate_integer_value = fate.value
+        outcome = {
+            0: "success",
+            1: "failure",
+            2: "critical_success",
+            3: "critical_failure",
+        }[int(fate.value)]
 
-        try:
-            with sqlite3.connect(DATABASE_FILE_PATH) as db_connection:
-                db_cursor = db_connection.cursor()
-
-                db_cursor.execute(
-                    """
-                    INSERT INTO hdm (id_player, fate) 
-                    VALUES (?, ?)
-                    ON CONFLICT(id_player) DO UPDATE SET fate = excluded.fate
-                    """,
-                    (player_identifier, fate_integer_value),
-                )
-
-                db_connection.commit()
-
-        except sqlite3.Error as database_exception:
-            await interact.response.send_message(
-                tr(
-                    "Processing error: structural database failure. {detail}",
-                    detail=database_exception,
-                ),
-                ephemeral=True,
-            )
-            return
+        gm_shield_store.set(
+            player_id=player_identifier,
+            roll_kind="generic",
+            outcome=outcome,
+        )
 
         await interact.response.send_message(
             content=tr(

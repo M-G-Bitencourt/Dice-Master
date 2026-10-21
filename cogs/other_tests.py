@@ -8,8 +8,17 @@ import sqlite3
 
 from utils.dice_mechanics import consume_deterministic_fate
 from utils.dice_mechanics import hdm_dices
-from utils.db_functions import get_character_thumbnail_payload
+from utils.db_functions import (
+    get_character_thumbnail_payload,
+    get_optional_character_id,
+)
 from utils.i18n import t as tr
+from utils.gm_dice import (
+    select_dice_for_outcome,
+    select_preset_dice,
+    select_reaction_dice,
+)
+from utils.gm_directives import gm_shield_store
 from utils.locale_service import apply_interaction_locale
 
 
@@ -39,8 +48,27 @@ class Other_tests(commands.Cog):
     ):
         apply_interaction_locale(interact, self.db_connection)
 
-        dices = [randint(1, 6) for _ in range(num_dados)]
-        dice_pool = sum(dices)
+        character_id = get_optional_character_id(
+            self.db_connection, interact.user.id
+        )
+        directive = gm_shield_store.consume(
+            character_id=character_id,
+            player_id=interact.user.id,
+            roll_kind="generic_roll",
+        )
+
+        if directive is not None and num_dados > 0:
+            dices, total = select_preset_dice(
+                num_dados,
+                modificador,
+                str(directive.payload.get("preset", "average")),
+                directive.payload.get("exact_total"),
+            )
+            dice_pool = sum(dices)
+        else:
+            dices = [randint(1, 6) for _ in range(max(0, num_dados))]
+            dice_pool = sum(dices)
+            total = dice_pool + modificador
 
         # Embed
         roll_embed = discord.Embed()
@@ -49,7 +77,7 @@ class Other_tests(commands.Cog):
         roll_embed.color = discord.Color.green()
         roll_embed.add_field(
             name=tr("Roll"),
-            value=f"`{tr('Dice')}: {dices} = {dice_pool}`\n{tr('Modifier')}: {modificador}\n\n**{tr('Total')}:** {dice_pool + modificador}",
+            value=f"`{tr('Dice')}: {dices} = {dice_pool}`\n{tr('Modifier')}: {modificador}\n\n**{tr('Total')}:** {total}",
         )
 
         await interact.response.send_message(embed=roll_embed)
@@ -73,11 +101,25 @@ class Other_tests(commands.Cog):
         await interaction.response.defer(ephemeral=False)
 
         player_id = interaction.user.id
+        character_id = get_optional_character_id(
+            self.db_connection, player_id
+        )
+        directive = gm_shield_store.consume(
+            character_id=character_id,
+            player_id=player_id,
+            roll_kind="reaction",
+        )
 
         # Processing transient database state
-        fate = consume_deterministic_fate(player_id)
+        fate = (
+            None
+            if directive is not None
+            else consume_deterministic_fate(player_id, self.db_connection)
+        )
 
-        if fate is not None:
+        if directive is not None:
+            dices = select_reaction_dice(modifier, directive.outcome)
+        elif fate is not None:
             # Mathematical safeguards: absolute limits for 3d6 bounds compounded by the modifier
             min_possible = 3 + modifier
             max_possible = 18 + modifier
@@ -196,21 +238,31 @@ class Other_tests(commands.Cog):
         await interaction.response.defer(ephemeral=False)
 
         player_id = interaction.user.id
+        effective_sl = max(0, vontade + modificador)
+        character_id = get_optional_character_id(
+            self.db_connection, player_id
+        )
+        directive = gm_shield_store.consume(
+            character_id=character_id,
+            player_id=player_id,
+            roll_kind="panic",
+        )
 
         # Database transaction: consuming transient fate state
-        pending_fate = consume_deterministic_fate(player_id)
+        pending_fate = (
+            None
+            if directive is not None
+            else consume_deterministic_fate(player_id, self.db_connection)
+        )
 
-        if pending_fate is not None:
+        if directive is not None:
+            dices = select_dice_for_outcome(effective_sl, directive.outcome)
+        elif pending_fate is not None:
             dices = hdm_dices(nh=vontade, fate=pending_fate)
         else:
             dices = [randint(1, 6) for _ in range(3)]
 
         dice_pool = sum(dices)
-        effective_sl = vontade + modificador
-
-        # Structural safeguard: Effective Skill Level cannot drop below absolute zero
-        if effective_sl < 0:
-            effective_sl = 0
 
         # Embed initialization
         panic_embed = discord.Embed()
@@ -270,8 +322,22 @@ class Other_tests(commands.Cog):
             )
 
             # Executing secondary panic metrics calculation (3d6 + failure margin)
-            panic_dices = [randint(1, 6) for _ in range(3)]
-            panic_dice_pool = sum(panic_dices)
+            table_directive = gm_shield_store.consume(
+                character_id=character_id,
+                player_id=player_id,
+                roll_kind="panic_table",
+            )
+            if table_directive is not None:
+                panic_dices, panic_total = select_preset_dice(
+                    3,
+                    0,
+                    str(table_directive.payload.get("preset", "average")),
+                    table_directive.payload.get("exact_total"),
+                )
+                panic_dice_pool = panic_total
+            else:
+                panic_dices = [randint(1, 6) for _ in range(3)]
+                panic_dice_pool = sum(panic_dices)
             failure_margin = dice_pool - effective_sl
 
             # GURPS Axiom: Critical failures automatically add a flat +10 penalty to the panic roll

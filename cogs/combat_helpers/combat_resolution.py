@@ -17,6 +17,11 @@ from cogs.combat_helpers.combat_rules import (
 from cogs.combat_helpers.combat_support import _can_defend, _roll_result_text
 from cogs.combat_helpers.combat_views import DefenseView, NextActionView
 from utils.i18n import get_locale, t as tr
+from utils.gm_dice import select_dice_for_outcome
+from utils.gm_directives import (
+    consume_health_directive,
+    gm_shield_store,
+)
 from utils.combat import (
     classify_roll,
     compute_armor_dr,
@@ -203,12 +208,34 @@ async def resolve_defense(
             feint_penalty = int(claimed["feint"] or 0)
             effective_nh = max(0, base_value - feint_penalty + int(modifier))
             target_owner_id = claimed.get("target_owner_id")
-            fate = (
-                consume_deterministic_fate(int(target_owner_id), connection)
-                if target_owner_id is not None
-                else None
+            defense_directive = gm_shield_store.consume(
+                character_id=target_character_id,
+                player_id=(
+                    int(target_owner_id)
+                    if target_owner_id is not None
+                    else None
+                ),
+                roll_kind="defense",
             )
-            if fate is not None:
+            fate = (
+                None
+                if defense_directive is not None
+                else (
+                    consume_deterministic_fate(
+                        int(target_owner_id), connection
+                    )
+                    if target_owner_id is not None
+                    else None
+                )
+            )
+            if (
+                defense_directive is not None
+                and defense_directive.outcome != "random"
+            ):
+                dices = select_dice_for_outcome(
+                    effective_nh, defense_directive.outcome
+                )
+            elif fate is not None:
                 dices = hdm_dices(nh=effective_nh, fate=fate)
             else:
                 dices = [randint(1, 6) for _ in range(3)]
@@ -294,6 +321,12 @@ async def resolve_defense(
                     old_pv,
                     new_pv,
                     int(target_data["encumbrance_penalty"]),
+                    directive_resolver=lambda check_type: consume_health_directive(
+                        target_character_id,
+                        claimed.get("target_owner_id"),
+                        check_type,
+                    ),
+                    flags=gm_shield_store.get_flags(target_character_id),
                 )
                 max_pv = int(profile["st"]) + int(
                     profile["additional_max_pv"] or 0

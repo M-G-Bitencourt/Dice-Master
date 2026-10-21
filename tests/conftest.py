@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from helpers import FakeBot, FakeInteraction, insert_character  # noqa: E402
+from utils.gm_directives import gm_shield_store  # noqa: E402
 
 INIT_SQL_PATH = PROJECT_ROOT / "data" / "init.sql"
 
@@ -27,6 +28,13 @@ INIT_SQL_PATH = PROJECT_ROOT / "data" / "init.sql"
 def create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(INIT_SQL_PATH.read_text(encoding="utf-8"))
     connection.commit()
+
+
+@pytest.fixture(autouse=True)
+def clear_gm_shield_store():
+    gm_shield_store.clear()
+    yield
+    gm_shield_store.clear()
 
 
 @pytest.fixture

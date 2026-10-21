@@ -13,8 +13,8 @@ import pytest
 from discord import app_commands
 
 from cogs.admin import Admin
-from helpers import FakeBot, FakeInteraction, FakeUser, insert_character, insert_hdm
-from utils.dice_mechanics import consume_deterministic_fate
+from helpers import FakeBot, FakeInteraction, FakeUser, insert_character
+from utils.gm_directives import gm_shield_store
 
 HP = app_commands.Choice(name="pv", value="hp")
 FP = app_commands.Choice(name="pf", value="fp")
@@ -101,7 +101,9 @@ class TestAdminInit:
 
 
 class TestHdmCommand:
-    async def test_non_dm_gets_denial_and_no_database_write(self, cog, patched_sqlite):
+    async def test_non_dm_gets_denial_and_no_pending_directive(
+        self, cog, patched_sqlite
+    ):
         interaction = FakeInteraction(user_id=1)
 
         await Admin.deterministic_mock_command.callback(
@@ -117,9 +119,12 @@ class TestHdmCommand:
             "Erro. Você não tem permissão para usar os comandos de Debug"
         )
         assert message["kwargs"]["ephemeral"] is True
+        assert gm_shield_store.active_for(character_id=None, player_id=42) == []
         assert patched_sqlite.execute("SELECT COUNT(*) FROM hdm").fetchone() == (0,)
 
-    async def test_dm_inserts_fate_and_replies_ephemerally(self, cog, patched_sqlite):
+    async def test_dm_sets_pending_directive_and_replies_ephemerally(
+        self, cog, patched_sqlite
+    ):
         interaction = FakeInteraction(user_id=999)
 
         await Admin.deterministic_mock_command.callback(
@@ -129,16 +134,26 @@ class TestHdmCommand:
             app_commands.Choice(name="Falha Crítica", value=3),
         )
 
-        row = patched_sqlite.execute("SELECT id_player, fate FROM hdm").fetchone()
-        assert row == (42, 3)
+        directive = gm_shield_store.consume(
+            character_id=None,
+            player_id=42,
+            roll_kind="generic",
+        )
+        assert directive is not None
+        assert directive.outcome == "critical_failure"
+        assert patched_sqlite.execute("SELECT COUNT(*) FROM hdm").fetchone() == (0,)
         message = interaction.response.messages[0]
         assert message["kwargs"]["content"] == (
             "A próxima rolagem de <@42> será Falha Crítica"
         )
         assert message["kwargs"]["ephemeral"] is True
 
-    async def test_dm_upsert_overwrites_the_single_row(self, cog, patched_sqlite):
-        insert_hdm(patched_sqlite, 42, 0)
+    async def test_dm_directive_overwrites_the_previous_one(
+        self, cog, patched_sqlite
+    ):
+        gm_shield_store.set(
+            player_id=42, roll_kind="generic", outcome="success"
+        )
         interaction = FakeInteraction(user_id=999)
 
         await Admin.deterministic_mock_command.callback(
@@ -148,10 +163,17 @@ class TestHdmCommand:
             app_commands.Choice(name="Sucesso Decisivo", value=2),
         )
 
-        rows = patched_sqlite.execute("SELECT id_player, fate FROM hdm").fetchall()
-        assert rows == [(42, 2)]
+        directive = gm_shield_store.consume(
+            character_id=None,
+            player_id=42,
+            roll_kind="generic",
+        )
+        assert directive is not None
+        assert directive.outcome == "critical_success"
 
-    async def test_fate_is_consumed_exactly_once(self, cog, patched_sqlite):
+    async def test_pending_directive_is_consumed_exactly_once(
+        self, cog, patched_sqlite
+    ):
         interaction = FakeInteraction(user_id=999)
 
         await Admin.deterministic_mock_command.callback(
@@ -161,10 +183,16 @@ class TestHdmCommand:
             app_commands.Choice(name="Falha Crítica", value=3),
         )
 
-        # consume_deterministic_fate opens its own sqlite3.connect, redirected to
-        # the same in-memory database by patched_sqlite.
-        assert consume_deterministic_fate(42) == 3
-        assert consume_deterministic_fate(42) is None
+        assert gm_shield_store.consume(
+            character_id=None,
+            player_id=42,
+            roll_kind="generic",
+        ) is not None
+        assert gm_shield_store.consume(
+            character_id=None,
+            player_id=42,
+            roll_kind="generic",
+        ) is None
 
 
 class TestManageCharacterResourcePool:
