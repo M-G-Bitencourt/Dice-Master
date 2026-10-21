@@ -501,42 +501,21 @@ class CombatPanelView(discord.ui.View):
             dm_id=self.dm_id,
             locale=self.locale,
         )
-        try:
-            new_message = await channel.send(embed=embed, view=new_view)
-        except (discord.HTTPException, discord.Forbidden):
+        new_message, delete_failed = await repost_combat_panel(
+            channel=channel,
+            embed=embed,
+            view=new_view,
+            connection=self.connection,
+            session_id=int(session["session_id"]),
+            stored_message_id=session.get("panel_message_id"),
+            interaction_message=interaction.message,
+        )
+        if new_message is None:
             await interaction.followup.send(
                 tr("Error: could not repost the combat panel."),
                 ephemeral=True,
             )
             return
-
-        with self.connection:
-            set_combat_session_panel(
-                self.connection,
-                int(session["session_id"]),
-                new_message.id,
-            )
-
-        old_ids = []
-        if interaction.message is not None:
-            old_ids.append(int(interaction.message.id))
-        stored_id = session.get("panel_message_id")
-        if stored_id is not None and int(stored_id) not in old_ids:
-            old_ids.append(int(stored_id))
-
-        delete_failed = False
-        for old_id in old_ids:
-            try:
-                if (
-                    interaction.message is not None
-                    and old_id == int(interaction.message.id)
-                ):
-                    await interaction.message.delete()
-                else:
-                    old_message = await channel.fetch_message(old_id)
-                    await old_message.delete()
-            except (discord.HTTPException, discord.NotFound, discord.Forbidden):
-                delete_failed = True
 
         if delete_failed:
             await interaction.followup.send(
@@ -569,22 +548,19 @@ class CombatPanelView(discord.ui.View):
             return
 
         session = result["session"]
+        next_participant = result["next_participant"]
+        round_number = result["round_number"]
+        if session is None:
+            return
+
         pending = get_pending_attack_for_channel(
             self.connection, self.channel_id
         )
-        participants = (
-            get_combat_participants(
-                self.connection, int(session["session_id"])
-            )
-            if session is not None
-            else []
+        participants = get_combat_participants(
+            self.connection, int(session["session_id"])
         )
-        recent_log = (
-            get_recent_combat_log(
-                self.connection, int(session["session_id"]), limit=5
-            )
-            if session is not None
-            else []
+        recent_log = get_recent_combat_log(
+            self.connection, int(session["session_id"]), limit=5
         )
         embed = build_panel_embed(
             session,
@@ -592,7 +568,58 @@ class CombatPanelView(discord.ui.View):
             participants=participants,
             recent_log=recent_log,
         )
-        await interaction.edit_original_response(embed=embed, view=self)
+        new_view = CombatPanelView(
+            connection=self.connection,
+            channel_id=self.channel_id,
+            guild_id=self.guild_id,
+            dm_id=self.dm_id,
+            locale=self.locale,
+        )
+
+        channel = interaction.channel
+        if channel is None:
+            await interaction.edit_original_response(
+                embed=embed, view=new_view
+            )
+        else:
+            new_message, delete_failed = await repost_combat_panel(
+                channel=channel,
+                embed=embed,
+                view=new_view,
+                connection=self.connection,
+                session_id=int(session["session_id"]),
+                stored_message_id=session.get("panel_message_id"),
+                interaction_message=interaction.message,
+            )
+            if new_message is None:
+                try:
+                    await interaction.edit_original_response(
+                        embed=embed, view=new_view
+                    )
+                except (
+                    discord.HTTPException,
+                    discord.NotFound,
+                    discord.Forbidden,
+                ):
+                    await interaction.followup.send(
+                        tr("Error: could not repost the combat panel."),
+                        ephemeral=True,
+                    )
+                    return
+            if delete_failed:
+                await interaction.followup.send(
+                    tr("Panel updated, but the old panel could not be deleted."),
+                    ephemeral=True,
+                )
+
+        await interaction.followup.send(
+            tr(
+                "Turn of **{character}** (round {round}).",
+                character=next_participant["character_name"],
+                round=round_number,
+            ),
+            ephemeral=True,
+        )
 
     async def close(self, interaction: discord.Interaction):
         with locale_context(self.locale or get_locale()):
@@ -610,3 +637,71 @@ class CombatPanelView(discord.ui.View):
 
             embed = build_panel_embed(None, None, closed=True)
             await interaction.edit_original_response(embed=embed, view=None)
+
+
+async def repost_combat_panel(
+    *,
+    channel,
+    embed: discord.Embed,
+    view: "CombatPanelView",
+    connection: sqlite3.Connection,
+    session_id: int,
+    stored_message_id: int | None = None,
+    interaction_message: discord.Message | None = None,
+) -> tuple[discord.Message | None, bool]:
+    """Send a fresh panel at the bottom and delete stale panel messages.
+
+    Returns the new message, or ``None`` when the channel send failed, and
+    whether at least one old panel could not be deleted. A stale panel whose
+    deletion fails is edited to remove its controls when possible.
+    """
+    try:
+        new_message = await channel.send(embed=embed, view=view)
+    except (discord.HTTPException, discord.NotFound, discord.Forbidden):
+        return None, False
+
+    try:
+        with connection:
+            set_combat_session_panel(connection, session_id, new_message.id)
+    except sqlite3.Error:
+        try:
+            await new_message.delete()
+        except (discord.HTTPException, discord.NotFound, discord.Forbidden):
+            pass
+        raise
+
+    old_ids: list[int] = []
+    if interaction_message is not None:
+        old_ids.append(int(interaction_message.id))
+    if stored_message_id is not None and int(stored_message_id) not in old_ids:
+        old_ids.append(int(stored_message_id))
+
+    delete_failed = False
+    for old_id in old_ids:
+        old_message = None
+        if (
+            interaction_message is not None
+            and old_id == int(interaction_message.id)
+        ):
+            old_message = interaction_message
+        else:
+            try:
+                old_message = await channel.fetch_message(old_id)
+            except discord.NotFound:
+                continue
+            except (discord.HTTPException, discord.Forbidden):
+                delete_failed = True
+                continue
+
+        try:
+            await old_message.delete()
+        except discord.NotFound:
+            continue
+        except (discord.HTTPException, discord.Forbidden):
+            delete_failed = True
+            try:
+                await old_message.edit(view=None)
+            except (discord.HTTPException, discord.NotFound, discord.Forbidden):
+                pass
+
+    return new_message, delete_failed

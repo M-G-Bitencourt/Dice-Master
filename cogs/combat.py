@@ -19,7 +19,10 @@ from cogs.combat_helpers.combat_support import (
     _friendly_character_error,
     _is_gm_user,
 )
-from cogs.combat_helpers.combat_views import CombatPanelView
+from cogs.combat_helpers.combat_views import (
+    CombatPanelView,
+    repost_combat_panel,
+)
 from utils.combat import HIT_LOCATIONS, MANEUVERS
 from utils.i18n import catalog_label, get_locale, t as tr
 from utils.locale_service import apply_interaction_locale
@@ -437,15 +440,16 @@ class Combat(commands.Cog):
         )
         return embed, view
 
-    async def _edit_stored_panel(self, session: dict) -> bool:
+    async def _edit_stored_panel(self, session: dict, channel=None) -> bool:
         """Edit the stored panel message; return False when it is unavailable."""
         panel_message_id = session.get("panel_message_id")
-        get_channel = getattr(self.bot, "get_channel", None)
-        channel = (
-            get_channel(int(session["channel_id"]))
-            if get_channel is not None
-            else None
-        )
+        if channel is None:
+            get_channel = getattr(self.bot, "get_channel", None)
+            channel = (
+                get_channel(int(session["channel_id"]))
+                if get_channel is not None
+                else None
+            )
         if panel_message_id is None or channel is None:
             return False
         try:
@@ -719,9 +723,37 @@ class Combat(commands.Cog):
         round_number = result["round_number"]
 
         if session is not None:
-            if not await self._edit_stored_panel(session):
-                await self._send_panel_to_channel(
-                    session, interaction.channel
+            channel = interaction.channel
+            if channel is None:
+                get_channel = getattr(self.bot, "get_channel", None)
+                channel = (
+                    get_channel(int(session["channel_id"]))
+                    if get_channel is not None
+                    else None
+                )
+
+            embed, view = self._build_panel_payload(session)
+            delete_failed = False
+            reposted = False
+            if channel is not None:
+                new_message, delete_failed = await repost_combat_panel(
+                    channel=channel,
+                    embed=embed,
+                    view=view,
+                    connection=self.db_connection,
+                    session_id=int(session["session_id"]),
+                    stored_message_id=session.get("panel_message_id"),
+                )
+                reposted = new_message is not None
+
+            if not reposted:
+                if not await self._edit_stored_panel(session, channel):
+                    await self._send_panel_to_channel(session, channel)
+
+            if delete_failed:
+                await interaction.followup.send(
+                    tr("Panel updated, but the old panel could not be deleted."),
+                    ephemeral=True,
                 )
 
         await interaction.followup.send(

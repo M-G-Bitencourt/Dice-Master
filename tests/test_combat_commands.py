@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import discord
+
 import cogs.battle as battle_module
 import cogs.combat_helpers.combat_feint as combat_feint_module
 import cogs.combat_helpers.combat_attack as combat_attack_module
@@ -1526,6 +1528,11 @@ class FakePanelChannel:
         return self.messages[message_id]
 
 
+class FakeDiscordHTTPException(discord.HTTPException):
+    def __init__(self):
+        pass
+
+
 class TestCombatPanel:
     async def test_start_creates_a_session_and_panel(
         self, make_cog, interaction, db
@@ -1628,12 +1635,17 @@ class TestCombatPanel:
             == attacker_id
         )
 
-    async def test_advance_turn_button_advances_and_edits_the_panel(
+    async def test_advance_turn_button_reposts_panel_to_bottom(
         self, make_cog, db
     ):
         cog = make_cog(Combat)
         attacker_id, target_id, _ = build_combatants(db)
-        join_combat(db, [attacker_id, target_id], attacker_id)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
         view = CombatPanelView(
             connection=db,
             channel_id=100,
@@ -1641,8 +1653,12 @@ class TestCombatPanel:
             dm_id=999,
         )
         gm_interaction = FakeInteraction(
-            user_id=999, channel_id=100, guild_id=1
+            user_id=999,
+            channel_id=100,
+            guild_id=1,
+            message=old_panel,
         )
+        gm_interaction.channel = channel
 
         await view.advance_turn(gm_interaction)
 
@@ -1650,7 +1666,181 @@ class TestCombatPanel:
             get_active_combat_session(db, 100)["active_character_id"]
             == target_id
         )
+        assert len(channel.sent) == 1
+        assert channel.sent[0]["message"].id == 500
+        assert isinstance(
+            channel.sent[0]["kwargs"]["view"], CombatPanelView
+        )
+        assert old_panel.deleted is True
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 500
+        assert "Turno de" in gm_interaction.followup.sent[0]["args"][0]
+        assert gm_interaction.response.deferred[0]["kwargs"]["ephemeral"] is True
+
+    async def test_next_turn_command_reposts_panel_to_bottom(
+        self, make_cog, db
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, _ = build_combatants(db)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
+        interaction = FakeInteraction(
+            user_id=999, channel_id=100, guild_id=1
+        )
+        interaction.channel = channel
+
+        await Combat.combat_next_turn.callback(cog, interaction)
+
+        assert (
+            get_active_combat_session(db, 100)["active_character_id"]
+            == target_id
+        )
+        assert len(channel.sent) == 1
+        assert channel.sent[0]["message"].id == 500
+        assert old_panel.deleted is True
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 500
+        assert "Turno de" in interaction.followup.sent[0]["args"][0]
+
+    async def test_consecutive_next_turn_reposts_do_not_leave_old_panels(
+        self, make_cog, db
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, _ = build_combatants(db)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
+
+        first_interaction = FakeInteraction(
+            user_id=999, channel_id=100, guild_id=1
+        )
+        first_interaction.channel = channel
+        await Combat.combat_next_turn.callback(cog, first_interaction)
+        first_new_panel = channel.sent[0]["message"]
+
+        second_interaction = FakeInteraction(
+            user_id=999, channel_id=100, guild_id=1
+        )
+        second_interaction.channel = channel
+        await Combat.combat_next_turn.callback(cog, second_interaction)
+
+        assert len(channel.sent) == 2
+        assert old_panel.deleted is True
+        assert first_new_panel.deleted is True
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 501
+
+    async def test_advance_turn_button_falls_back_when_repost_fails(
+        self, make_cog, db
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, _ = build_combatants(db)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
+
+        async def fail_send(**kwargs):
+            raise FakeDiscordHTTPException()
+
+        channel.send = fail_send
+        view = CombatPanelView(
+            connection=db,
+            channel_id=100,
+            guild_id=1,
+            dm_id=999,
+        )
+        gm_interaction = FakeInteraction(
+            user_id=999,
+            channel_id=100,
+            guild_id=1,
+            message=old_panel,
+        )
+        gm_interaction.channel = channel
+
+        await view.advance_turn(gm_interaction)
+
+        assert channel.sent == []
+        assert old_panel.deleted is False
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 111
         assert gm_interaction.edited[0]["kwargs"]["embed"].title == "Painel de Combate"
+        assert "Turno de" in gm_interaction.followup.sent[0]["args"][0]
+
+    async def test_next_turn_command_falls_back_when_repost_fails(
+        self, make_cog, db
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, _ = build_combatants(db)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
+
+        async def fail_send(**kwargs):
+            raise FakeDiscordHTTPException()
+
+        channel.send = fail_send
+        interaction = FakeInteraction(
+            user_id=999, channel_id=100, guild_id=1
+        )
+        interaction.channel = channel
+
+        await Combat.combat_next_turn.callback(cog, interaction)
+
+        assert channel.sent == []
+        assert old_panel.deleted is False
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 111
+        assert old_panel.embeds[0].title == "Painel de Combate"
+        assert "Turno de" in interaction.followup.sent[0]["args"][0]
+
+    async def test_advance_turn_button_disables_old_panel_when_delete_fails(
+        self, make_cog, db
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, _ = build_combatants(db)
+        session = join_combat(db, [attacker_id, target_id], attacker_id)
+        with db:
+            set_combat_session_panel(db, session["session_id"], 111)
+        old_panel = FakeMessage(111)
+        channel = FakePanelChannel()
+        channel.messages[111] = old_panel
+
+        async def fail_delete():
+            raise FakeDiscordHTTPException()
+
+        old_panel.delete = fail_delete
+        view = CombatPanelView(
+            connection=db,
+            channel_id=100,
+            guild_id=1,
+            dm_id=999,
+        )
+        gm_interaction = FakeInteraction(
+            user_id=999,
+            channel_id=100,
+            guild_id=1,
+            message=old_panel,
+        )
+        gm_interaction.channel = channel
+
+        await view.advance_turn(gm_interaction)
+
+        assert len(channel.sent) == 1
+        assert old_panel.deleted is False
+        assert old_panel.views[-1] is None
+        assert get_active_combat_session(db, 100)["panel_message_id"] == 500
+        assert "não foi possível apagar" in (
+            gm_interaction.followup.sent[0]["args"][0]
+        )
+        assert "Turno de" in gm_interaction.followup.sent[1]["args"][0]
 
     def test_combat_commands_are_flat_and_english(self):
         expected = {
