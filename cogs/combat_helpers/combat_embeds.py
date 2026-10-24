@@ -102,6 +102,9 @@ def _build_attack_embed(
     feint_penalty: int = 0,
     awaiting_defense: bool = False,
     critical_failure_dices: list[int] | None = None,
+    armor_sublocation_label: str | None = None,
+    sublocation_roll: int | None = None,
+    show_sublocation: bool = False,
 ) -> discord.Embed:
     """Build the compact public attack result embed."""
     title = _clamp(
@@ -165,8 +168,21 @@ def _build_attack_embed(
                 damage_type=damage_type_label,
             ),
             tr("Location: {location}", location=hit_location_name),
-            f"{tr('DR')}: {rd}",
         ]
+        if (
+            show_sublocation
+            and armor_sublocation_label is not None
+            and sublocation_roll is not None
+        ):
+            damage_lines.append(
+                tr(
+                    "Sublocation: {sublocation} (1d: {roll})",
+                    sublocation=armor_sublocation_label,
+                    roll=sublocation_roll,
+                )
+            )
+        if not awaiting_defense:
+            damage_lines.append(f"{tr('DR')}: {rd}")
         embed.add_field(
             name=tr("Damage"),
             value=_clamp("\n".join(damage_lines), 1000),
@@ -274,6 +290,9 @@ def _build_defense_embed(
     rd: int,
     rd_warnings: list[str],
     health_outcome: dict | None = None,
+    hit_location_name: str | None = None,
+    armor_sublocation_label: str | None = None,
+    sublocation_roll: int | None = None,
 ) -> discord.Embed:
     """Build the compact public defence and injury result embed."""
     target_name = profile["name"]
@@ -332,6 +351,26 @@ def _build_defense_embed(
             ),
             inline=False,
         )
+        if hit_location_name is not None:
+            location_lines = [
+                tr("Location: {location}", location=hit_location_name)
+            ]
+            if (
+                armor_sublocation_label is not None
+                and sublocation_roll is not None
+            ):
+                location_lines.append(
+                    tr(
+                        "Sublocation: {sublocation} (1d: {roll})",
+                        sublocation=armor_sublocation_label,
+                        roll=sublocation_roll,
+                    )
+                )
+            embed.add_field(
+                name=tr("Location"),
+                value=_clamp("\n".join(location_lines), 1000),
+                inline=False,
+            )
     else:
         embed.add_field(
             name=tr("Applied damage"),

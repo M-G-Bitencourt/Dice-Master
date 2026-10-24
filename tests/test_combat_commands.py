@@ -121,7 +121,12 @@ def join_combat(db, character_ids, active_character_id: int) -> dict:
 
 
 async def invoke_attack_raw(
-    cog, interaction, attacker_id: int, target_id: int, mode_id: int
+    cog,
+    interaction,
+    attacker_id: int,
+    target_id: int,
+    mode_id: int,
+    local: int = 0,
 ):
     await Combat.combat_attack.callback(
         cog,
@@ -129,7 +134,7 @@ async def invoke_attack_raw(
         alvo=str(target_id),
         arma=f"{attacker_id}:{mode_id}",
         personagem=None,
-        local=SimpleNamespace(value=0),
+        local=SimpleNamespace(value=local),
         manobra=None,
         modificador=None,
         nh_manual=None,
@@ -173,6 +178,187 @@ class TestCombatAttack:
         assert pending["rd"] == 2
         assert pending["target_character_id"] == target_id
         assert pending["message_id"] == interaction._original_message.id
+
+    async def test_arm_attack_uses_sublocation_armor_and_reveals_on_hit(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        forearm = insert_body_part(db, name="Antebraços", factor=0.25)
+        material_id = insert_armor_material(
+            db, name="Braçadeira", dr=3, is_flexible=0
+        )
+        link_armor(db, target_id, material_id, forearm, is_equipped=1)
+        db.commit()
+        join_combat(db, [attacker_id, target_id], attacker_id)
+        patch_rng(
+            monkeypatch,
+            combat_attack_module,
+            [3, 3, 3, 2],
+            budget=10,
+        )
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id, local=7
+        )
+
+        pending = get_pending_attack_for_channel(db, 100)
+        assert pending is not None
+        assert pending["hit_location"] == 7
+        assert pending["hit_sublocation"] == "forearms"
+        assert pending["hit_sublocation_roll"] == 2
+        assert pending["rd"] == 3
+        attack_embed = interaction.edited[0]["kwargs"]["embed"]
+        damage_field = next(
+            field.value
+            for field in attack_embed.fields
+            if field.name == "Dano"
+        )
+        assert "Sublocal" not in damage_field
+        assert "RD" not in damage_field
+
+        target_interaction = FakeInteraction(
+            user_id=2,
+            message=FakeMessage(55),
+            channel_id=100,
+            guild_id=1,
+        )
+        patch_rng(monkeypatch, combat_resolution_module, [4, 4, 4], budget=10)
+        view = interaction.edited[0]["kwargs"]["view"]
+        await view.handle_defense(
+            target_interaction, view.children[0].option
+        )
+
+        defense_embed = target_interaction.edited[0]["kwargs"]["embed"]
+        location_field = next(
+            field.value
+            for field in defense_embed.fields
+            if field.name == "Local"
+        )
+        assert "Braço" in location_field
+        assert "Sublocal: Antebraços (1d: 2)" in location_field
+
+    async def test_successful_defense_does_not_reveal_sublocation(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        join_combat(db, [attacker_id, target_id], attacker_id)
+        patch_rng(
+            monkeypatch,
+            combat_attack_module,
+            [3, 3, 3, 2],
+            budget=10,
+        )
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id, local=7
+        )
+
+        target_interaction = FakeInteraction(
+            user_id=2,
+            message=FakeMessage(55),
+            channel_id=100,
+            guild_id=1,
+        )
+        patch_rng(monkeypatch, combat_resolution_module, [1, 1, 1], budget=10)
+        view = interaction.edited[0]["kwargs"]["view"]
+        await view.handle_defense(
+            target_interaction, view.children[0].option
+        )
+
+        defense_embed = target_interaction.edited[0]["kwargs"]["embed"]
+        field_names = {field.name for field in defense_embed.fields}
+        assert "Local" not in field_names
+        assert all(
+            "Sublocal" not in field.value for field in defense_embed.fields
+        )
+
+    async def test_torso_roll_one_hits_vitals_and_uses_thorax_dr(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        db.execute(
+            "UPDATE melee_weapon_modes SET damage_type = ? WHERE mode_id = ?",
+            ("perfuração", mode_id),
+        )
+        db.commit()
+        join_combat(db, [attacker_id, target_id], attacker_id)
+        patch_rng(
+            monkeypatch,
+            combat_attack_module,
+            [3, 3, 3, 1],
+            budget=10,
+        )
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id, local=0
+        )
+
+        pending = get_pending_attack_for_channel(db, 100)
+        assert pending is not None
+        assert pending["hit_location"] == 0
+        assert pending["hit_sublocation"] == "vitals"
+        assert pending["hit_sublocation_roll"] == 1
+        assert pending["rd"] == 2
+
+        target_interaction = FakeInteraction(
+            user_id=2,
+            message=FakeMessage(55),
+            channel_id=100,
+            guild_id=1,
+        )
+        patch_rng(monkeypatch, combat_resolution_module, [4, 4, 4], budget=10)
+        view = interaction.edited[0]["kwargs"]["view"]
+        await view.handle_defense(
+            target_interaction, view.children[0].option
+        )
+
+        defense_embed = target_interaction.edited[0]["kwargs"]["embed"]
+        location_field = next(
+            field.value
+            for field in defense_embed.fields
+            if field.name == "Local"
+        )
+        assert "Tronco" in location_field
+        assert "Sublocal: Órgãos Vitais (1d: 1)" in location_field
+        damage_field = next(
+            field.value
+            for field in defense_embed.fields
+            if field.name == "Dano"
+        )
+        assert "Multiplicador: x3.0" in damage_field
+
+    async def test_immediate_critical_hit_reveals_sublocation(
+        self, make_cog, interaction, db, monkeypatch
+    ):
+        cog = make_cog(Combat)
+        attacker_id, target_id, mode_id = build_combatants(db)
+        join_combat(db, [attacker_id, target_id], attacker_id)
+        patch_rng(
+            monkeypatch,
+            combat_attack_module,
+            [1, 1, 1, 2],
+            budget=10,
+        )
+        patch_rng(monkeypatch, battle_module, [1], budget=10)
+
+        await invoke_attack_raw(
+            cog, interaction, attacker_id, target_id, mode_id, local=0
+        )
+
+        assert get_pending_attack_for_channel(db, 100) is None
+        attack_embed = interaction.edited[0]["kwargs"]["embed"]
+        damage_field = next(
+            field.value
+            for field in attack_embed.fields
+            if field.name == "Dano"
+        )
+        assert "Sublocal: Tórax (1d: 2)" in damage_field
 
     async def test_attack_embed_shows_expression_dice_modifiers_and_total(
         self, make_cog, interaction, db, monkeypatch
@@ -343,7 +529,12 @@ class TestCombatAttack:
         db.commit()
         join_combat(db, [attacker_id, target_id], attacker_id)
 
-        patch_rng(monkeypatch, combat_attack_module, [3, 3, 3, 4, 5], budget=20)
+        patch_rng(
+            monkeypatch,
+            combat_attack_module,
+            [3, 3, 3, 1, 4, 5],
+            budget=20,
+        )
         patch_rng(monkeypatch, combat_resolution_module, [3, 3, 3, 4, 5], budget=20)
         patch_rng(monkeypatch, battle_module, [1], budget=20)
 

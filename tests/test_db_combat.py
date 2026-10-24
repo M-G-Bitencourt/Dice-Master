@@ -265,6 +265,27 @@ class TestPendingAttacks:
         db.commit()
         assert get_pending_attack(db, attack_id)["status"] == "resolved"
 
+    def test_persists_armor_sublocation(self, db):
+        attacker_id, _ = make_attacker(db)
+        target_id = make_target(db)
+
+        attack_id = create_pending_attack(
+            db,
+            **pending_payload(
+                attacker_id,
+                target_id,
+                hit_location=7,
+                hit_sublocation="forearms",
+                hit_sublocation_roll=2,
+            ),
+        )
+        db.commit()
+
+        pending = get_pending_attack(db, attack_id)
+        assert pending["hit_location"] == 7
+        assert pending["hit_sublocation"] == "forearms"
+        assert pending["hit_sublocation_roll"] == 2
+
     def test_second_claim_returns_none(self, db):
         attacker_id, _ = make_attacker(db)
         target_id = make_target(db)

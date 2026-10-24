@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 _MIGRATION_1 = """
@@ -800,6 +800,23 @@ def _apply_migration_11(connection: sqlite3.Connection) -> None:
     )
 
 
+def _apply_migration_12(connection: sqlite3.Connection) -> None:
+    """Add the resolved armor sublocation to pending attacks."""
+    if not _table_exists(connection, "pending_attacks"):
+        return
+
+    if not _has_column(connection, "pending_attacks", "hit_sublocation"):
+        connection.execute(
+            'ALTER TABLE "pending_attacks" '
+            'ADD COLUMN "hit_sublocation" TEXT'
+        )
+    if not _has_column(connection, "pending_attacks", "hit_sublocation_roll"):
+        connection.execute(
+            'ALTER TABLE "pending_attacks" '
+            'ADD COLUMN "hit_sublocation_roll" INTEGER'
+        )
+
+
 def apply_migrations(connection: sqlite3.Connection) -> int:
     """Apply every pending migration and return the resulting schema version."""
     current_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
@@ -872,5 +889,11 @@ def apply_migrations(connection: sqlite3.Connection) -> int:
         connection.execute("PRAGMA user_version = 11")
         connection.commit()
         current_version = 11
+
+    if current_version < 12:
+        _apply_migration_12(connection)
+        connection.execute("PRAGMA user_version = 12")
+        connection.commit()
+        current_version = 12
 
     return current_version

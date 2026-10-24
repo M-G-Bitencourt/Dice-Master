@@ -120,7 +120,7 @@ BODY_PART_PARENTS: dict[str, tuple[str, ...]] = {
     "Rosto": ("Cabeça",),
     "Tórax": ("Tronco",),
     "Abdômen": ("Tronco",),
-    "Virilha": ("Tronco",),
+    "Virilha": ("Abdômen",),
     "Ombros": ("Braços",),
     "Parte superior dos braços": ("Braços",),
     "Cotovelos": ("Braços",),
@@ -128,6 +128,43 @@ BODY_PART_PARENTS: dict[str, tuple[str, ...]] = {
     "Coxas": ("Pernas",),
     "Joelhos": ("Pernas",),
     "Canelas": ("Pernas",),
+}
+
+ARMOR_SUBLOCATIONS: dict[int, tuple[dict[str, Any], ...]] = {
+    0: (
+        {
+            "key": "vitals",
+            "body_part": "Tórax",
+            "label_kind": "hit_locations",
+            "min": 1,
+            "max": 1,
+            "hit_location_id": 1,
+        },
+        {"key": "thorax", "body_part": "Tórax", "min": 2, "max": 4},
+        {"key": "abdomen", "body_part": "Abdômen", "min": 5, "max": 6},
+    ),
+    7: (
+        {"key": "forearms", "body_part": "Antebraços", "min": 1, "max": 3},
+        {"key": "elbows", "body_part": "Cotovelos", "min": 4, "max": 4},
+        {
+            "key": "upper_arms",
+            "body_part": "Parte superior dos braços",
+            "min": 5,
+            "max": 5,
+        },
+        {"key": "shoulders", "body_part": "Ombros", "min": 6, "max": 6},
+    ),
+    8: (
+        {"key": "shins", "body_part": "Canelas", "min": 1, "max": 3},
+        {"key": "knees", "body_part": "Joelhos", "min": 4, "max": 4},
+        {"key": "thighs", "body_part": "Coxas", "min": 5, "max": 6},
+    ),
+}
+
+ARMOR_SUBLOCATION_BY_KEY: dict[str, dict[str, Any]] = {
+    entry["key"]: entry
+    for entries in ARMOR_SUBLOCATIONS.values()
+    for entry in entries
 }
 
 FLEXIBLE_UNDER_RIGID_PENALTY = 1
@@ -152,6 +189,43 @@ _BASE_DAMAGE_MULTIPLIERS: dict[int, float] = {
 def hit_location(hit_location_id: int) -> dict[str, Any]:
     """Return the canonical hit location definition for one numeric id."""
     return HIT_LOCATIONS.get(hit_location_id, HIT_LOCATIONS[0])
+
+
+def resolve_armor_sublocation(
+    hit_location_id: int, roll: int
+) -> dict[str, Any] | None:
+    """Resolve one d6 roll into the armor sublocation that was hit."""
+    entries = ARMOR_SUBLOCATIONS.get(int(hit_location_id))
+    if entries is None:
+        return None
+
+    rolled = int(roll)
+    for entry in entries:
+        if entry["min"] <= rolled <= entry["max"]:
+            resolved = dict(entry)
+            resolved["roll"] = rolled
+            resolved["hit_location_id"] = int(
+                entry.get("hit_location_id", hit_location_id)
+            )
+            return resolved
+    return None
+
+
+def armor_sublocation_by_key(key: str | None) -> dict[str, Any] | None:
+    """Return the canonical sublocation definition for one persisted key."""
+    if key is None:
+        return None
+    entry = ARMOR_SUBLOCATION_BY_KEY.get(str(key))
+    return dict(entry) if entry is not None else None
+
+
+def resolved_hit_location_id(
+    hit_location_id: int, sublocation: dict[str, Any] | None
+) -> int:
+    """Return the hit location used by injury calculations after resolution."""
+    if sublocation is None:
+        return int(hit_location_id)
+    return int(sublocation.get("hit_location_id", hit_location_id))
 
 
 def normalize_damage_type(raw_value: Any) -> int:
@@ -281,8 +355,10 @@ def compute_basic_move(
     return halve_for_wounds(move, wounded)
 
 
-def _body_part_coverage(body_part: str) -> set[str]:
-    """Return a body part, its ancestors and its own direct/indirect descendants."""
+def _body_part_coverage(
+    body_part: str, *, include_descendants: bool = True
+) -> set[str]:
+    """Return a body part, its ancestors and optionally its own descendants."""
     coverage = {body_part}
     current = body_part
 
@@ -290,6 +366,9 @@ def _body_part_coverage(body_part: str) -> set[str]:
         parents = BODY_PART_PARENTS[current]
         coverage.update(parents)
         current = parents[0]
+
+    if not include_descendants:
+        return coverage
 
     descendants = {body_part}
     changed = True
@@ -305,16 +384,27 @@ def _body_part_coverage(body_part: str) -> set[str]:
 
 
 def compute_armor_dr(
-    layers: Iterable[dict[str, Any]], hit_location_id: int
+    layers: Iterable[dict[str, Any]],
+    hit_location_id: int,
+    *,
+    sublocation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute layered DR; each flexible layer under any rigid layer loses one DR.
 
-    The caller decides whether to accept multiple rigid layers; this function
-    reports that condition as a warning instead of silently dropping a layer.
+    When a sublocation is supplied, only that segment and its full-location
+    ancestors protect the hit. The caller decides whether to accept multiple
+    rigid layers; this function reports that condition as a warning instead of
+    silently dropping a layer.
     """
     location = hit_location(hit_location_id)
-    target_body_part = location["armor_body_part"]
-    applicable_parts = _body_part_coverage(target_body_part)
+    target_body_part = (
+        str(sublocation["body_part"])
+        if sublocation is not None
+        else location["armor_body_part"]
+    )
+    applicable_parts = _body_part_coverage(
+        target_body_part, include_descendants=sublocation is None
+    )
 
     selected = [
         dict(layer)
@@ -374,6 +464,7 @@ def compute_armor_dr(
         "layers": breakdown,
         "warnings": warnings,
         "warning_keys": warning_keys,
+        "target_body_part": target_body_part,
     }
 
 

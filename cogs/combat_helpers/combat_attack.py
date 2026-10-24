@@ -31,6 +31,7 @@ from utils.gm_directives import (
     gm_shield_store,
 )
 from utils.combat import (
+    ARMOR_SUBLOCATIONS,
     DAMAGE_TYPE_KEYS,
     HIT_LOCATIONS,
     MANEUVERS,
@@ -42,6 +43,8 @@ from utils.combat import (
     max_defense_attempts,
     normalize_damage_type,
     parse_damage_expression,
+    resolve_armor_sublocation,
+    resolved_hit_location_id,
 )
 from utils.db_functions import (
     add_combat_log,
@@ -313,15 +316,18 @@ async def perform_attack(
     actor_effects = actor_data["effects"]
     target_effects = target_data["effects"]
 
-    rd_result = compute_armor_dr(
-        target_data["armor_layers"], hit_location_id
-    )
-
     actor_profile = actor_data["profile"]
     target_profile = target_data["profile"]
-    rd = int(rd_result["total"]) + int(
-        target_profile.get("rd_bonus") or 0
-    )
+    rd_result: dict = {
+        "total": 0,
+        "layers": [],
+        "warnings": [],
+        "warning_keys": [],
+    }
+    rd = 0
+    armor_sublocation = None
+    sublocation_roll = None
+    resolved_location_id = hit_location_id
     target_is_npc = bool(target_profile.get("is_npc"))
     target_owner_id = (
         None if target_is_npc else target_profile.get("owner_id")
@@ -433,6 +439,24 @@ async def perform_attack(
         attack_roll = sum(dices)
         outcome = classify_roll(attack_roll, breakdown["effective"])
 
+        if outcome["success"]:
+            if hit_location_id in ARMOR_SUBLOCATIONS:
+                sublocation_roll = randint(1, 6)
+                armor_sublocation = resolve_armor_sublocation(
+                    hit_location_id, sublocation_roll
+                )
+            rd_result = compute_armor_dr(
+                target_data["armor_layers"],
+                hit_location_id,
+                sublocation=armor_sublocation,
+            )
+            rd = int(rd_result["total"]) + int(
+                target_profile.get("rd_bonus") or 0
+            )
+            resolved_location_id = resolved_hit_location_id(
+                hit_location_id, armor_sublocation
+            )
+
         if outcome["critical_failure"]:
             critical_failure_dices = [randint(1, 6) for _ in range(3)]
 
@@ -505,7 +529,7 @@ async def perform_attack(
                 critical_injury = compute_injury(
                     penetrating,
                     damage_type,
-                    hit_location_id,
+                    resolved_location_id,
                     int(
                         target_profile[
                             "normal_diffuse_homogeneous_unded"
@@ -592,6 +616,12 @@ async def perform_attack(
                     rd=rd,
                     damage_type=damage_type,
                     hit_location=hit_location_id,
+                    hit_sublocation=(
+                        armor_sublocation["key"]
+                        if armor_sublocation is not None
+                        else None
+                    ),
+                    hit_sublocation_roll=sublocation_roll,
                     feint=int(conditions["feint"]),
                     is_critical=0,
                     modifiers_json=json.dumps(
@@ -661,6 +691,16 @@ async def perform_attack(
         mode_name=mode_name,
         maneuver_label=catalog_label("maneuvers", maneuver_key),
         hit_location_name=catalog_label("hit_locations", location["key"]),
+        armor_sublocation_label=(
+            catalog_label(
+                armor_sublocation.get("label_kind", "body_parts"),
+                armor_sublocation["key"],
+            )
+            if armor_sublocation is not None
+            else None
+        ),
+        sublocation_roll=sublocation_roll,
+        show_sublocation=critical_injury is not None,
         damage_type_label=catalog_label(
             "damage_types", DAMAGE_TYPE_KEYS.get(damage_type, "special")
         ),

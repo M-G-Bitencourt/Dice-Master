@@ -89,6 +89,8 @@ def test_migration_creates_combat_tables_and_layer_column():
         "custom_modifier",
         "max_defense_attempts",
         "defense_attempts",
+        "hit_sublocation",
+        "hit_sublocation_roll",
     } <= pending_columns
 
     session_columns = {

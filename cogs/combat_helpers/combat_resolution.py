@@ -15,19 +15,22 @@ from cogs.combat_helpers.combat_rules import (
 )
 from cogs.combat_helpers.combat_support import _can_defend, _roll_result_text
 from cogs.combat_helpers.combat_views import DefenseView, NextActionView
-from utils.i18n import get_locale, t as tr
+from utils.i18n import catalog_label, get_locale, t as tr
 from utils.gm_dice import select_dice_for_outcome
 from utils.gm_directives import (
     consume_health_directive,
     gm_shield_store,
 )
 from utils.combat import (
+    armor_sublocation_by_key,
     classify_roll,
     compute_armor_dr,
     compute_injury,
     compute_shock_penalty,
     defense_remaining_uses,
     effect_is_available,
+    hit_location,
+    resolved_hit_location_id,
 )
 from utils.db_functions import (
     add_combat_log,
@@ -121,6 +124,13 @@ async def resolve_defense(
     can_try_again = False
     remaining_options: list[dict] = []
     rd = 0
+    armor_sublocation = armor_sublocation_by_key(
+        claimed.get("hit_sublocation")
+    )
+    sublocation_roll = claimed.get("hit_sublocation_roll")
+    resolved_location_id = resolved_hit_location_id(
+        int(claimed["hit_location"]), armor_sublocation
+    )
 
     try:
         target_character_id = int(claimed["target_character_id"])
@@ -287,7 +297,7 @@ async def resolve_defense(
                 injury_data = compute_injury(
                     penetrating_damage,
                     int(claimed["damage_type"]),
-                    int(claimed["hit_location"]),
+                    resolved_location_id,
                     int(profile["normal_diffuse_homogeneous_unded"] or 0),
                     int(profile["st"]),
                     int(
@@ -400,8 +410,11 @@ async def resolve_defense(
         )
     else:
         rd_result = compute_armor_dr(
-            target_data["armor_layers"], int(claimed["hit_location"])
+            target_data["armor_layers"],
+            int(claimed["hit_location"]),
+            sublocation=armor_sublocation,
         )
+        declared_location = hit_location(int(claimed["hit_location"]))
         embed = _build_defense_embed(
             defense_label=defense_label,
             waive=waive,
@@ -416,6 +429,18 @@ async def resolve_defense(
             rd=effective_rd,
             rd_warnings=rd_result["warnings"],
             health_outcome=health_outcome,
+            hit_location_name=catalog_label(
+                "hit_locations", declared_location["key"]
+            ),
+            armor_sublocation_label=(
+                catalog_label(
+                    armor_sublocation.get("label_kind", "body_parts"),
+                    armor_sublocation["key"],
+                )
+                if armor_sublocation is not None
+                else None
+            ),
+            sublocation_roll=sublocation_roll,
         )
         view = NextActionView(
             connection=connection,

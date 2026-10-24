@@ -7,6 +7,7 @@ import pytest
 from utils.combat import (
     active_effect_bonus,
     apply_continuous_effects,
+    armor_sublocation_by_key,
     build_modifier_breakdown,
     classify_roll,
     compute_armor_dr,
@@ -21,6 +22,8 @@ from utils.combat import (
     normalize_damage_type,
     parse_damage_expression,
     parse_parry_modifier,
+    resolve_armor_sublocation,
+    resolved_hit_location_id,
 )
 
 
@@ -264,6 +267,195 @@ class TestArmorLayering:
 
         assert result["total"] == 10
         assert result["warnings"]
+
+
+class TestArmorSublocations:
+    @pytest.mark.parametrize(
+        "location_id, roll, key, body_part, resolved_id",
+        [
+            (0, 1, "vitals", "Tórax", 1),
+            (0, 2, "thorax", "Tórax", 0),
+            (0, 4, "thorax", "Tórax", 0),
+            (0, 5, "abdomen", "Abdômen", 0),
+            (0, 6, "abdomen", "Abdômen", 0),
+            (7, 1, "forearms", "Antebraços", 7),
+            (7, 3, "forearms", "Antebraços", 7),
+            (7, 4, "elbows", "Cotovelos", 7),
+            (7, 5, "upper_arms", "Parte superior dos braços", 7),
+            (7, 6, "shoulders", "Ombros", 7),
+            (8, 1, "shins", "Canelas", 8),
+            (8, 3, "shins", "Canelas", 8),
+            (8, 4, "knees", "Joelhos", 8),
+            (8, 5, "thighs", "Coxas", 8),
+            (8, 6, "thighs", "Coxas", 8),
+        ],
+    )
+    def test_resolves_each_sublocation(
+        self, location_id, roll, key, body_part, resolved_id
+    ):
+        sublocation = resolve_armor_sublocation(location_id, roll)
+
+        assert sublocation is not None
+        assert sublocation["key"] == key
+        assert sublocation["body_part"] == body_part
+        assert sublocation["roll"] == roll
+        assert resolved_hit_location_id(location_id, sublocation) == resolved_id
+
+    @pytest.mark.parametrize("location_id", [1, 2, 3, 4, 5, 6, 9, 10])
+    def test_locations_without_armor_sublocations_do_not_roll(
+        self, location_id
+    ):
+        assert resolve_armor_sublocation(location_id, 1) is None
+
+    def test_vitals_hit_uses_thorax_and_full_torso_armor(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Peitoral",
+                "body_part": "Tórax",
+                "dr": 5,
+                "is_flexible": False,
+                "layer_order": 1,
+            },
+            {
+                "character_armor_id": 2,
+                "name": "Cota",
+                "body_part": "Tronco",
+                "dr": 2,
+                "is_flexible": True,
+                "layer_order": 2,
+            },
+        ]
+        sublocation = resolve_armor_sublocation(0, 1)
+
+        result = compute_armor_dr(layers, 0, sublocation=sublocation)
+
+        assert result["total"] == 7
+        assert result["target_body_part"] == "Tórax"
+
+    def test_abdomen_armor_does_not_protect_vitals(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Cinta",
+                "body_part": "Abdômen",
+                "dr": 4,
+                "is_flexible": True,
+                "layer_order": 1,
+            }
+        ]
+        sublocation = resolve_armor_sublocation(0, 1)
+
+        result = compute_armor_dr(layers, 0, sublocation=sublocation)
+
+        assert result["total"] == 0
+
+    def test_abdomen_sublocation_ignores_thorax_and_groin_armor(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Peitoral",
+                "body_part": "Tórax",
+                "dr": 5,
+                "is_flexible": False,
+                "layer_order": 1,
+            },
+            {
+                "character_armor_id": 2,
+                "name": "Proteção de virilha",
+                "body_part": "Virilha",
+                "dr": 3,
+                "is_flexible": True,
+                "layer_order": 2,
+            },
+            {
+                "character_armor_id": 3,
+                "name": "Cinta",
+                "body_part": "Abdômen",
+                "dr": 4,
+                "is_flexible": True,
+                "layer_order": 3,
+            },
+        ]
+        sublocation = resolve_armor_sublocation(0, 5)
+
+        result = compute_armor_dr(layers, 0, sublocation=sublocation)
+
+        assert result["total"] == 4
+        assert result["target_body_part"] == "Abdômen"
+
+    def test_forearm_armor_does_not_protect_shoulder(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Braçadeira",
+                "body_part": "Antebraços",
+                "dr": 3,
+                "is_flexible": False,
+                "layer_order": 1,
+            }
+        ]
+        forearm = resolve_armor_sublocation(7, 2)
+        shoulder = resolve_armor_sublocation(7, 6)
+
+        assert compute_armor_dr(layers, 7, sublocation=forearm)["total"] == 3
+        assert compute_armor_dr(layers, 7, sublocation=shoulder)["total"] == 0
+
+    def test_full_arm_armor_protects_any_sublocation(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Manga de malha",
+                "body_part": "Braços",
+                "dr": 4,
+                "is_flexible": True,
+                "layer_order": 1,
+            }
+        ]
+        sublocation = resolve_armor_sublocation(7, 4)
+
+        result = compute_armor_dr(layers, 7, sublocation=sublocation)
+
+        assert result["total"] == 4
+
+    def test_shin_armor_does_not_protect_thigh(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Greva",
+                "body_part": "Canelas",
+                "dr": 5,
+                "is_flexible": False,
+                "layer_order": 1,
+            }
+        ]
+        shin = resolve_armor_sublocation(8, 1)
+        thigh = resolve_armor_sublocation(8, 5)
+
+        assert compute_armor_dr(layers, 8, sublocation=shin)["total"] == 5
+        assert compute_armor_dr(layers, 8, sublocation=thigh)["total"] == 0
+
+    def test_abdomen_armor_protects_direct_groin_hit(self):
+        layers = [
+            {
+                "character_armor_id": 1,
+                "name": "Cinta",
+                "body_part": "Abdômen",
+                "dr": 4,
+                "is_flexible": True,
+                "layer_order": 1,
+            }
+        ]
+
+        result = compute_armor_dr(layers, 6)
+
+        assert result["total"] == 4
+
+    def test_sublocation_key_lookup(self):
+        assert armor_sublocation_by_key("vitals")["hit_location_id"] == 1
+        assert armor_sublocation_by_key("thorax")["body_part"] == "Tórax"
+        assert armor_sublocation_by_key(None) is None
+        assert armor_sublocation_by_key("unknown") is None
 
 
 class TestRollClassification:

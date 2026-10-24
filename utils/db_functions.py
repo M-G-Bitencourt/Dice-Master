@@ -1053,6 +1053,8 @@ _PENDING_ATTACK_COLUMNS = (
     "rd",
     "damage_type",
     "hit_location",
+    "hit_sublocation",
+    "hit_sublocation_roll",
     "feint",
     "is_critical",
     "modifiers_json",
@@ -1572,6 +1574,8 @@ def create_pending_attack(
     feint: int,
     is_critical: int,
     modifiers_json: str | None,
+    hit_sublocation: str | None = None,
+    hit_sublocation_roll: int | None = None,
 ) -> int:
     """Insert one pending attack and return its primary key."""
     cursor = connection.execute(
@@ -1584,7 +1588,7 @@ def create_pending_attack(
             maneuver, custom_modifier,
             nh_base, nh_effective, attack_roll, attack_margin,
             raw_damage, critical_damage, max_defense_attempts, defense_attempts,
-            rd, damage_type, hit_location,
+            rd, damage_type, hit_location, hit_sublocation, hit_sublocation_roll,
             feint, is_critical, modifiers_json, expires_at
         )
         VALUES (
@@ -1595,7 +1599,7 @@ def create_pending_attack(
             ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?,
             datetime('now', '+15 minutes')
         )
@@ -1628,6 +1632,8 @@ def create_pending_attack(
             rd,
             damage_type,
             hit_location,
+            hit_sublocation,
+            hit_sublocation_roll,
             feint,
             is_critical,
             modifiers_json,
